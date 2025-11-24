@@ -1,20 +1,24 @@
-# Build Stage 1
+# Build Stage
 
 FROM node:22-alpine AS build
 WORKDIR /app
 
-RUN corepack enable
+# Install dependencies needed for native builds
+RUN apk add --no-cache python3 make g++
 
-# Copy package.json and your lockfile, here we add pnpm-lock.yaml for illustration
+# Copy package files
 COPY package.json package-lock.json ./
 
-# Install dependencies
-RUN npm i
+# Install dependencies with optimizations
+# - ci is faster and uses package-lock.json
+# - omit=dev skips devDependencies in final install
+# - prefer-offline uses cache when available
+RUN npm ci --prefer-offline --no-audit --legacy-peer-deps
 
-# Copy the entire project
+# Copy source files
 COPY . ./
 
-# Build the project
+# Build the application
 RUN npm run build
 
 # Runtime Stage
