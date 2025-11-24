@@ -1,0 +1,24 @@
+{
+  "name": "family-archive-frontend",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "nuxt dev --host 0.0.0.0 --port 3000",
+    "build": "nuxt build",
+    "start": "nuxt start"
+  },
+  "dependencies": {
+    "@mdi/font": "^7.4.47",
+    "@yeger/vue-masonry-wall": "^5.1.0",
+    "nuxt": "^3.8.2",
+    "pinia": "^2.1.7",
+    "vue": "^3.4.0",
+    "vuetify": "^3.5.0"
+  },
+  "devDependencies": {
+    "@nuxt/devtools": "^1.0.0",
+    "@nuxt/kit": "^3.8.2",
+    "@pinia/nuxt": "^0.5.1"
+  }
+}

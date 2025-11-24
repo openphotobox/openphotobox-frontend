@@ -1,0 +1,298 @@
+/* Global styles for OpenPhotobox */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Caudex:ital,wght@0,400;0,700;1,400&display=swap');
+
+:root {
+  /* Color palette */
+  --primary-50: #eff6ff;
+  --primary-100: #dbeafe;
+  --primary-200: #bfdbfe;
+  --primary-300: #93c5fd;
+  --primary-400: #60a5fa;
+  --primary-500: #3b82f6;
+  --primary-600: #2563eb;
+  --primary-700: #1d4ed8;
+  --primary-800: #1e40af;
+  --primary-900: #1e3a8a;
+  
+  /* Sage Green Accent Colors */
+  --accent-50: #f0fdf4;
+  --accent-100: #dcfce7;
+  --accent-200: #bbf7d0;
+  --accent-300: #86efac;
+  --accent-400: #4ade80;
+  --accent-500: #32936F; /* Your chosen sage green */
+  --accent-600: #2d7d5f;
+  --accent-700: #15803d;
+  --accent-800: #166534;
+  --accent-900: #14532d;
+  
+  /* Neutral colors */
+  --neutral-50: #f8fafc;
+  --neutral-100: #f1f5f9;
+  --neutral-200: #e2e8f0;
+  --neutral-300: #cbd5e1;
+  --neutral-400: #94a3b8;
+  --neutral-500: #64748b;
+  --neutral-600: #475569;
+  --neutral-700: #334155;
+  --neutral-800: #1e293b;
+  --neutral-900: #0f172a;
+  
+  /* Success colors (using sage green) */
+  --success-50: #f0fdf4;
+  --success-100: #dcfce7;
+  --success-200: #bbf7d0;
+  --success-300: #86efac;
+  --success-400: #4ade80;
+  --success-500: #32936F;
+  --success-600: #2d7d5f;
+  --success-700: #15803d;
+  --success-800: #166534;
+  --success-900: #14532d;
+  
+  /* Warning colors */
+  --warning-50: #fffbeb;
+  --warning-100: #fef3c7;
+  --warning-200: #fde68a;
+  --warning-300: #fcd34d;
+  --warning-400: #fbbf24;
+  --warning-500: #f59e0b;
+  --warning-600: #d97706;
+  --warning-700: #b45309;
+  --warning-800: #92400e;
+  --warning-900: #78350f;
+  
+  /* Error colors */
+  --error-50: #fef2f2;
+  --error-100: #fee2e2;
+  --error-200: #fecaca;
+  --error-300: #fca5a5;
+  --error-400: #f87171;
+  --error-500: #ef4444;
+  --error-600: #dc2626;
+  --error-700: #b91c1c;
+  --error-800: #991b1b;
+  --error-900: #7f1d1d;
+  
+  /* Shadows */
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  --shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+  --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+  
+  /* Border radius */
+  --radius-sm: 0.25rem;
+  --radius: 0.375rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.75rem;
+  --radius-xl: 1rem;
+  --radius-2xl: 1.5rem;
+  --radius-full: 9999px;
+}
+
+/* Base styles */
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background-color: var(--neutral-50);
+  color: var(--neutral-900);
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Typography */
+.font-family-caudex {
+  font-family: 'Caudex', Georgia, serif !important;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--neutral-100);
+  border-radius: var(--radius);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--accent-500);
+  border-radius: var(--radius);
+  transition: background-color 0.2s ease;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--accent-600);
+}
+
+/* Vuetify theme overrides */
+:deep(.v-theme--light) {
+  --v-theme-primary: #32936f; /* accent-500 #32936F */
+  --v-theme-secondary: 100 116 139; /* neutral-500 */
+  --v-theme-success: 50 147 111; /* accent-500 #32936F */
+  --v-theme-warning: 245 158 11; /* warning-500 */
+  --v-theme-error: 239 68 68; /* error-500 */
+  --v-theme-info: 59 130 246; /* primary-500 */
+  
+  --v-theme-surface: 255 255 255;
+  --v-theme-background: 248 250 252; /* neutral-50 */
+  --v-theme-on-surface: 15 23 42; /* neutral-900 */
+  --v-theme-on-background: 15 23 42; /* neutral-900 */
+}
+
+:deep(.v-theme--dark) {
+  --v-theme-primary: 50 147 111; /* accent-500 #32936F */
+  --v-theme-secondary: 148 163 184; /* neutral-400 */
+  --v-theme-success: 50 147 111; /* accent-500 #32936F */
+  --v-theme-warning: 245 158 11; /* warning-500 */
+  --v-theme-error: 239 68 68; /* error-500 */
+  --v-theme-info: 59 130 246; /* primary-500 */
+  
+  --v-theme-surface: 30 41 59; /* neutral-800 */
+  --v-theme-background: 15 23 42; /* neutral-900 */
+  --v-theme-on-surface: 248 250 252; /* neutral-50 */
+  --v-theme-on-background: 248 250 252; /* neutral-50 */
+}
+
+/* Card styling */
+:deep(.v-card) {
+  border-radius: var(--radius-lg) !important;
+  box-shadow: var(--shadow) !important;
+  transition: box-shadow 0.3s ease, transform 0.3s ease;
+}
+
+:deep(.v-card:hover) {
+  box-shadow: var(--shadow-lg) !important;
+}
+
+/* Button styling */
+:deep(.v-btn) {
+  border-radius: var(--radius-md) !important;
+  font-weight: 500 !important;
+  text-transform: none !important;
+  letter-spacing: 0.025em !important;
+  transition: all 0.2s ease !important;
+}
+
+:deep(.v-btn--variant-elevated) {
+  box-shadow: var(--shadow) !important;
+}
+
+:deep(.v-btn--variant-elevated:hover) {
+  box-shadow: var(--shadow-md) !important;
+}
+
+/* Input styling */
+:deep(.v-text-field .v-field) {
+  border-radius: var(--radius-md) !important;
+}
+
+:deep(.v-select .v-field) {
+  border-radius: var(--radius-md) !important;
+}
+
+/* Chip styling */
+:deep(.v-chip) {
+  border-radius: var(--radius-full) !important;
+  font-weight: 500 !important;
+}
+
+/* Dialog styling */
+:deep(.v-dialog .v-card) {
+  border-radius: var(--radius-xl) !important;
+}
+
+/* Navigation drawer styling */
+:deep(.v-navigation-drawer) {
+  border-radius: 0 var(--radius-xl) var(--radius-xl) 0 !important;
+}
+
+/* App bar styling */
+:deep(.v-app-bar) {
+  backdrop-filter: blur(10px) !important;
+}
+
+/* Loading states */
+:deep(.v-progress-circular) {
+  color: var(--accent-500) !important;
+}
+
+/* Focus states */
+:deep(.v-btn:focus-visible) {
+  outline: 2px solid var(--accent-500) !important;
+  outline-offset: 2px !important;
+}
+
+:deep(.v-text-field:focus-within .v-field) {
+  border-color: var(--accent-500) !important;
+}
+
+/* Animation utilities */
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.3s ease;
+}
+
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+}
+
+.slide-up-enter-active,
+.slide-up-leave-active {
+  transition: transform 0.3s ease, opacity 0.3s ease;
+}
+
+.slide-up-enter-from,
+.slide-up-leave-to {
+  transform: translateY(20px);
+  opacity: 0;
+}
+
+/* Utility classes */
+.glass-effect {
+  background: rgba(255, 255, 255, 0.1) !important;
+  backdrop-filter: blur(10px) !important;
+  border: 1px solid rgba(255, 255, 255, 0.2) !important;
+}
+
+.gradient-primary {
+  background: linear-gradient(135deg, var(--primary-500) 0%, var(--primary-700) 100%) !important;
+}
+
+.gradient-accent {
+  background: linear-gradient(135deg, var(--accent-500) 0%, var(--accent-700) 100%) !important;
+}
+
+.gradient-neutral {
+  background: linear-gradient(135deg, var(--neutral-50) 0%, var(--neutral-100) 100%) !important;
+}
+
+.text-gradient {
+  background: linear-gradient(135deg, var(--accent-500) 0%, var(--accent-700) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Responsive utilities */
+@media (max-width: 768px) {
+  :deep(.v-card) {
+    border-radius: var(--radius-md) !important;
+  }
+  
+  :deep(.v-btn) {
+    border-radius: var(--radius) !important;
+  }
+}
+
+/* Print styles */
+@media print {
+  :deep(.v-navigation-drawer),
+  :deep(.v-app-bar),
+  :deep(.v-btn) {
+    display: none !important;
+  }
+}
