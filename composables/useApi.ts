@@ -10,10 +10,9 @@ import { createSetupApi } from '@/api/endpoints/setup'
 import { createStorageApi } from '@/api/endpoints/storage'
 import { createUploadApi } from '@/api/endpoints/upload'
 
-let apiInstance: ReturnType<typeof createApi> | null = null
-
 function createApi() {
   // Get runtime config for API base URL
+  // This is called fresh each time to ensure runtime env vars are picked up
   const config = useRuntimeConfig()
   const baseUrl = config.public.apiBase as string
   
@@ -48,8 +47,12 @@ function createApi() {
   }
 }
 
+// Cached instance per runtime context
+let apiInstance: ReturnType<typeof createApi> | null = null
+
 export function useApi() {
-  // Create singleton instance
+  // Create instance once per app lifecycle
+  // useRuntimeConfig() will have the correct runtime values
   if (!apiInstance) {
     apiInstance = createApi()
   }

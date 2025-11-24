@@ -32,6 +32,8 @@ COPY --from=build /app/.output/ ./
 # Runtime environment variables
 ENV PORT=3000
 ENV HOST=0.0.0.0
+# API Base URL - override this when running the container
+# Example: docker run -e NUXT_PUBLIC_API_BASE=http://your-backend:8000
 ENV NUXT_PUBLIC_API_BASE=http://localhost:8000
 
 # Expose the application port
