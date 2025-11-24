@@ -51,6 +51,12 @@ export interface Face {
   confidence?: number
   embedding?: number[]
   
+  // Confirmation fields
+  confirmed?: boolean
+  confirmed_by?: string
+  confirmed_by_username?: string
+  confirmed_at?: string
+  
   created_at: string
   updated_at: string
 }

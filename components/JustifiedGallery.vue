@@ -55,10 +55,10 @@ function getViewportHeight() {
 }
 
 function updateMetrics() {
-  const ext = resolveExternalEl();
-  const measureNode = ext ?? host.value;
-  if (!measureNode) return;
-  containerWidth.value = measureNode.clientWidth;
+  // Always measure the host element for width (it's inside the padded container)
+  // Only use external element for scroll tracking
+  if (!host.value) return;
+  containerWidth.value = host.value.clientWidth;
   viewportTop.value = getScrollTop();
   viewportHeight.value = getViewportHeight();
 }
@@ -67,8 +67,12 @@ function updateMetrics() {
 type Row = { boxes:{i:number; w:number; h:number}[]; height:number; top:number; };
 
 const rows = computed<Row[]>(() => {
-  const W = containerWidth.value;
+  let W = containerWidth.value;
   if (!W || !props.images?.length) return [];
+  
+  // Reduce container width slightly to ensure no overflow
+  W = W - 2; // 2px safety margin
+  
   const items = props.images.map((im, i) => ({ i, ar: (im.width||1)/(im.height||1) }));
   const out: Row[] = [];
   let row: {i:number; ar:number}[] = [];
@@ -77,15 +81,32 @@ const rows = computed<Row[]>(() => {
   const flush = (justify:boolean) => {
     if (!row.length) return;
     const gaps = gap.value*(row.length-1);
+    const availableWidth = W - gaps;
     let h = targetRowHeight.value;
     const widthAtTarget = sumAR*h + gaps;
+    
     if (justify) {
-      const scale = (W - gaps) / (sumAR*h);
+      const scale = availableWidth / (sumAR*h);
       h = h * Math.min(scale, maxScale.value);
     } else {
       h = Math.min(h, targetRowHeight.value*maxScale.value);
     }
+    
+    // Calculate boxes
     const boxes = row.map(r => ({ i:r.i, w:r.ar*h, h }));
+    
+    // Safety check: ensure total width doesn't exceed container
+    const totalBoxWidth = boxes.reduce((sum, b) => sum + b.w, 0);
+    if (totalBoxWidth > availableWidth) {
+      // Scale down proportionally to fit
+      const adjustScale = availableWidth / totalBoxWidth;
+      boxes.forEach(b => {
+        b.w = b.w * adjustScale;
+        b.h = b.h * adjustScale;
+      });
+      h = h * adjustScale;
+    }
+    
     out.push({ boxes, height:h, top:0 });
     row = []; sumAR = 0;
   };
@@ -146,9 +167,9 @@ onMounted(async () => {
   await nextTick();
   updateMetrics();
 
-  // resize observers
+  // resize observers - always observe host for width changes
   ro = new ResizeObserver(updateMetrics);
-  if (ext) ro.observe(ext); else if (host.value) ro.observe(host.value);
+  if (host.value) ro.observe(host.value);
 
   // listeners
   const el = scroller.value as any;
@@ -177,10 +198,10 @@ watch(() => props.images, () => requestAnimationFrame(updateMetrics));
       <div :style="{ height: windowed.before + 'px' }" />
       <div v-for="row in windowed.slice" :key="row.top" class="jg-row" :style="{ height: row.height + 'px', marginBottom: gap + 'px' }">
         <div
-          v-for="b in row.boxes"
+          v-for="(b, idx) in row.boxes"
           :key="images[b.i].src + '-' + b.w"
           class="jg-item"
-          :style="{ width: b.w + 'px', height: b.h + 'px', marginRight: gap + 'px' }"
+          :style="{ width: b.w + 'px', height: b.h + 'px', marginRight: (idx < row.boxes.length - 1 ? gap : 0) + 'px' }"
           @click="emit('item-click', images[b.i])"
         >
           <img
@@ -207,25 +228,53 @@ watch(() => props.images, () => requestAnimationFrame(updateMetrics));
 </template>
 
 <style scoped>
-.jg-host { width: 100%; }
-.jg-phantom { position: relative; width: 100%; }
-.jg-row { white-space: nowrap; font-size: 0; }
+.jg-host { 
+  width: 100%; 
+  max-width: 100%; 
+  box-sizing: border-box; 
+  overflow: hidden; 
+}
+.jg-phantom { 
+  position: relative; 
+  width: 100%; 
+  max-width: 100%; 
+  box-sizing: border-box; 
+}
+.jg-row { 
+  white-space: nowrap; 
+  font-size: 0; 
+  width: 100%;
+  max-width: 100%; 
+  box-sizing: border-box; 
+  overflow: hidden;
+}
 .jg-item {
   display: inline-block;
   vertical-align: top;
   overflow: hidden;
   border-radius: 8px;
   background: #f2f2f2;
+  position: relative;
+  flex-shrink: 0;
 }
 .jg-item > img {
-  width: 100%; height: 100%; object-fit: cover; display: block;
-  user-select: none; -webkit-user-drag: none;
+  width: 100%; 
+  height: 100%; 
+  object-fit: cover; 
+  display: block;
+  user-select: none; 
+  -webkit-user-drag: none;
   transition: transform 120ms ease;
 }
-.jg-item:hover > img { transform: scale(1.02); }
+.jg-item:hover > img { 
+  transform: scale(1.02); 
+}
 
-.jg-overlay { position: absolute; inset: 0; pointer-events: none; }
-.jg-item { position: relative; }
+.jg-overlay { 
+  position: absolute; 
+  inset: 0; 
+  pointer-events: none; 
+}
 .jg-face-box {
   position: absolute;
   border: 2px solid #4CAF50;

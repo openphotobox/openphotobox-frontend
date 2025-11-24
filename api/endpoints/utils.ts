@@ -23,6 +23,11 @@ export function createUtilsApi(client: ApiClient) {
         }
       }
     },
+
+    // Batch execute multiple async API calls
+    batch: async <T = any>(calls: Array<() => Promise<ApiResponse<T>>>): Promise<Array<ApiResponse<T>>> => {
+      return Promise.all(calls.map(call => call()))
+    },
   }
 }
 

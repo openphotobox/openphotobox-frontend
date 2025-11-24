@@ -81,7 +81,6 @@
             <v-img
               ref="imageRef"
               :src="displayedImageUrl"
-              :lazy-src="thumbnailUrl"
               :transition="false"
               :eager="true"
               :alt="currentAsset.description || 'Photo'"
@@ -97,8 +96,16 @@
                 </div>
               </template>
               <template v-slot:placeholder>
-                <div v-if="!displayedImageUrl && !thumbnailUrl" class="image-placeholder">
+                <div class="image-placeholder">
+                  <!-- Show thumbnail while full image loads for instant feedback -->
+                  <img 
+                    v-if="currentAsset?.thumbnail_url && displayedImageUrl !== currentAsset.thumbnail_url"
+                    :src="currentAsset.thumbnail_url" 
+                    class="placeholder-thumbnail"
+                    alt="Loading..."
+                  />
                   <v-progress-circular 
+                    v-else
                     size="64" 
                     indeterminate 
                     color="white"
@@ -208,36 +215,64 @@
                     <v-img :src="face.person_headshot_url || face.thumbnail_url || '/placeholder-avatar.jpg'" cover></v-img>
                   </v-avatar>
                   <div class="person-info">
-                    <div class="person-name">{{ face.person_name }}</div>
+                    <div class="person-name">
+                      {{ face.person_name }}{{ face.confirmed === false ? '?' : '' }}
+                    </div>
                     <div class="person-actions mt-1">
-                      <v-btn v-if="editFacesMode"
-                        size="x-small"
-                        variant="text"
-                        icon
-                        @click.stop="openAssignDialog(face)"
-                        :title="'Edit assignment'"
-                      >
-                        <v-icon size="small">mdi-pencil</v-icon>
-                      </v-btn>
-                      <v-btn v-if="editFacesMode"
-                        size="x-small"
-                        variant="text"
-                        icon
-                        color="error"
-                        @click.stop="unassignFace(face)"
-                        :title="'Unmatch (set to Unknown)'"
-                      >
-                        <v-icon size="small">mdi-link-off</v-icon>
-                      </v-btn>
-                      <v-btn v-if="editFacesMode"
-                        size="x-small"
-                        variant="text"
-                        icon
-                        color="error"
-                        @click.stop="deleteFace(face)"
-                        :title="'Delete face'">
-                        <v-icon size="small">mdi-delete</v-icon>
-                      </v-btn>
+                      <!-- For unconfirmed faces (candidates), show confirm/reject buttons -->
+                      <template v-if="face.confirmed === false && !editFacesMode">
+                        <v-btn
+                          size="x-small"
+                          variant="text"
+                          icon
+                          color="success"
+                          @click.stop="confirmFace(face)"
+                          :title="'Confirm this assignment'"
+                        >
+                          <v-icon size="small">mdi-check</v-icon>
+                        </v-btn>
+                        <v-btn
+                          size="x-small"
+                          variant="text"
+                          icon
+                          color="error"
+                          @click.stop="unassignFace(face)"
+                          :title="'Reject (unassign)'"
+                        >
+                          <v-icon size="small">mdi-close</v-icon>
+                        </v-btn>
+                      </template>
+                      <!-- For confirmed faces in edit mode, show edit/unassign/delete -->
+                      <template v-if="editFacesMode">
+                        <v-btn
+                          size="x-small"
+                          variant="text"
+                          icon
+                          @click.stop="openAssignDialog(face)"
+                          :title="'Edit assignment'"
+                        >
+                          <v-icon size="small">mdi-pencil</v-icon>
+                        </v-btn>
+                        <v-btn
+                          size="x-small"
+                          variant="text"
+                          icon
+                          color="error"
+                          @click.stop="unassignFace(face)"
+                          :title="'Unmatch (set to Unknown)'"
+                        >
+                          <v-icon size="small">mdi-link-off</v-icon>
+                        </v-btn>
+                        <v-btn
+                          size="x-small"
+                          variant="text"
+                          icon
+                          color="error"
+                          @click.stop="deleteFace(face)"
+                          :title="'Delete face'">
+                          <v-icon size="small">mdi-delete</v-icon>
+                        </v-btn>
+                      </template>
                     </div>
                   </div>
                 </div>
@@ -422,7 +457,7 @@ const isOpen = computed({
   set: (value) => emit('update:modelValue', value)
 })
 
-const { assets: assetsApi, people, utils } = useApi()
+const { assets: assetsApi, people, faces, utils } = useApi()
 
 const detailedAsset = ref(props.asset)
 const currentAsset = computed(() => detailedAsset.value)
@@ -528,26 +563,14 @@ const unassignedFaces = computed(() => {
   return faces.filter((f) => !f.person)
 })
 
-// Lazy loading for full images
-const {
-  currentImageUrl,
-  isFullImageLoaded,
-  isFullImageLoading,
-  startLoadingFullImage,
-  loadFullImage
-} = useLazyImage(toRef(props, 'asset'), {
-  loadDelay: 300, // Load full image after 300ms
-  preloadOnHover: true
-})
-
-// Keep thumbnail visible while full image preloads; only show spinner when no URL
+// Direct image URL - use preview/display size for optimal viewing
 const displayedImageUrl = computed(() => {
-  // During transitions, currentImageUrl already points to thumbnail, and swaps to full when ready.
-  // When navigating quickly, ensure we always have a URL to show.
-  return currentImageUrl.value || currentAsset.value?.thumbnail_url || currentAsset.value?.original_url || ''
+  // Prefer preview/display size (2048px) for viewing - perfect for screens, much smaller than original
+  // Fall back to original if preview not available yet (during migration)
+  return currentAsset.value?.preview_url || currentAsset.value?.display_url || 
+         currentAsset.value?.original_url || currentAsset.value?.storage_url || 
+         currentAsset.value?.thumbnail_url || ''
 })
-
-const thumbnailUrl = computed(() => currentAsset.value?.thumbnail_url || '')
 
 // Navigation computed properties
 const currentIndex = computed(() => {
@@ -558,22 +581,42 @@ const currentIndex = computed(() => {
 const hasPrevious = computed(() => currentIndex.value > 0)
 const hasNext = computed(() => currentIndex.value < props.assets.length - 1)
 
-// Preload neighbors to avoid visible swaps when navigating quickly
+// Enhanced preloading: Load current image + multiple neighbors for smooth navigation
+const imageCache = new Map()
+
+const preloadImage = (asset) => {
+  if (!asset) return
+  // Use preview/display size for preloading (much smaller than original)
+  const url = asset.preview_url || asset.display_url || asset.original_url || asset.storage_url
+  if (!url) return
+  
+  // Check if already cached
+  if (imageCache.has(url)) return
+  
+  // Preload the image
+  const img = new Image()
+  img.onload = () => {
+    imageCache.set(url, img)
+  }
+  img.onerror = () => {
+    // Remove from cache on error
+    imageCache.delete(url)
+  }
+  img.src = url
+}
+
+// Preload strategy: Load current + 5 in each direction when viewer opens or navigates
 watch(() => currentIndex.value, (idx) => {
   if (idx < 0) return
-  const preload = (asset) => {
-    if (!asset) return
-    const url = asset.original_url || asset.storage_url
-    if (!url) return
-    const img = new Image()
-    img.src = url
+  
+  // Preload range (5 images in each direction for smoother navigation)
+  const preloadRange = 5
+  for (let i = idx - preloadRange; i <= idx + preloadRange; i++) {
+    if (i >= 0 && i < props.assets.length) {
+      preloadImage(props.assets[i])
+    }
   }
-  // Next and previous in the provided assets list
-  const next = props.assets[idx + 1]
-  const prev = props.assets[idx - 1]
-  preload(next)
-  preload(prev)
-})
+}, { immediate: true })
 
 // Methods
 const close = () => {
@@ -605,9 +648,11 @@ const handleContentClick = (event) => {
 }
 
 const downloadPhoto = () => {
-  if (currentAsset.value?.original_url) {
+  // Always download the full original, not the preview
+  const originalUrl = currentAsset.value?.original_url || currentAsset.value?.storage_url
+  if (originalUrl) {
     const link = document.createElement('a')
-    link.href = currentAsset.value.original_url
+    link.href = originalUrl
     link.download = `photo-${currentAsset.value.id}.jpg`
     link.click()
   }
@@ -741,6 +786,26 @@ const createAndAssign = async () => {
     assignDialog.error = e?.message || 'Failed to create and assign person'
   } finally {
     assignDialog.creating = false
+  }
+}
+
+// Confirm a face assignment
+const confirmFace = async (face) => {
+  if (!face) return
+  try {
+    const res = await faces.bulkConfirm({ face_ids: [face.id] })
+    if (!res || res.success === false) {
+      alert(res?.error || 'Failed to confirm face')
+      return
+    }
+    // Refresh asset to reflect updated faces
+    const refreshed = await assetsApi.get(currentAsset.value.id)
+    if (refreshed && refreshed.success && refreshed.data) {
+      detailedAsset.value = cacheBustAssetFaces({ ...currentAsset.value, ...refreshed.data })
+    }
+  } catch (e) {
+    console.error('Confirm failed', e)
+    alert('Failed to confirm face')
   }
 }
 
@@ -896,11 +961,15 @@ onUnmounted(() => {
   document.removeEventListener('keydown', handleKeydown)
 })
 
-// Watch for asset changes to start loading full image
+// Watch for asset changes to fetch details
 watch(() => props.asset, (newAsset) => {
   if (newAsset) {
     clearHighlight()
     detailedAsset.value = newAsset
+    
+    // Immediately preload the current image
+    preloadImage(newAsset)
+    
     // Fetch full asset details (includes faces) so People section can render
     assetsApi.get(newAsset.id).then((res) => {
       if (res && res.success && res.data) {
@@ -908,20 +977,20 @@ watch(() => props.asset, (newAsset) => {
         detailedAsset.value = cacheBustAssetFaces({ ...newAsset, ...res.data })
       }
     }).catch(() => { /* ignore */ })
-    // Start loading full image after a short delay
-    setTimeout(() => {
-      startLoadingFullImage()
-    }, 100)
   }
 }, { immediate: true })
 
-// Watch for dialog opening to start loading full image
+// When dialog opens, trigger preloading of nearby images
 watch(isOpen, (newValue) => {
-  if (newValue && props.asset) {
-    // Start loading full image when dialog opens
-    setTimeout(() => {
-      startLoadingFullImage()
-    }, 200)
+  if (newValue && currentIndex.value >= 0) {
+    // Trigger the preload watcher
+    const idx = currentIndex.value
+    const preloadRange = 5
+    for (let i = idx - preloadRange; i <= idx + preloadRange; i++) {
+      if (i >= 0 && i < props.assets.length) {
+        preloadImage(props.assets[i])
+      }
+    }
   }
 })
 
@@ -1039,6 +1108,15 @@ function cacheBustAssetFaces(asset) {
   justify-content: center;
   width: 100%;
   height: 100%;
+  position: relative;
+}
+
+.placeholder-thumbnail {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  filter: blur(2px);
+  opacity: 0.8;
 }
 
 .nav-arrow {

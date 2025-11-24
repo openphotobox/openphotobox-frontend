@@ -142,7 +142,7 @@ watch(() => route.fullPath, (p,n) => {
     <JustifiedGallery
       v-if="albumAssets.length"
       :images="albumAssets.map(a => ({
-        src: a.thumbnail_url || a.original_url || a.storage_url,
+        src: a.thumbnail_urls?.md || a.thumbnail_urls?.sm || a.thumbnail_url || a.original_url || a.storage_url,
         width: a.width || 1920,
         height: a.height || 1080,
         alt: a.description || 'Photo',

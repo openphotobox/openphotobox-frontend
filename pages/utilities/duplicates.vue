@@ -48,7 +48,7 @@
           <v-card-text>
             <div class="d-flex flex-wrap" style="gap:8px;">
               <div v-for="item in group.items" :key="item.id" class="d-flex flex-column align-center" style="width: 160px;">
-                <v-img :src="item.thumbnail_url || item.original_url || item.storage_url" :alt="item.description || 'photo'" width="160" height="120" cover class="mb-1" />
+                <v-img :src="item.thumbnail_urls?.sm || item.thumbnail_url || item.original_url || item.storage_url" :alt="item.description || 'photo'" width="160" height="120" cover class="mb-1" />
                 <div class="text-caption text-medium-emphasis text-truncate" style="max-width: 160px;">{{ item.description || 'Photo' }}</div>
               </div>
             </div>

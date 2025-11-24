@@ -52,9 +52,11 @@ const loadPage = async (cur?: string | null) => {
   try {
     const url = cur ? `/api/people/faces/unassigned-assets/?cursor=${encodeURIComponent(cur)}` : '/api/people/faces/unassigned-assets/'
     const res = await client.get<any>(url)
-    const list = res?.results || []
-    assets.value = [...assets.value, ...list]
-    cursor.value = res?.next || null
+    if (res.success && res.data) {
+      const list = res.data.results || []
+      assets.value = [...assets.value, ...list]
+      cursor.value = res.data.next || null
+    }
   } finally {
     loading.value = false
   }
@@ -69,7 +71,7 @@ const refresh = async () => {
 onMounted(refresh)
 
 const jgImages = computed(() => assets.value.map(a => ({
-  src: a.thumbnail_url || a.original_url || a.storage_url,
+  src: a.thumbnail_urls?.md || a.thumbnail_urls?.sm || a.thumbnail_url || a.original_url || a.storage_url,
   width: a.width || 1920,
   height: a.height || 1080,
   alt: a.description || 'Photo',

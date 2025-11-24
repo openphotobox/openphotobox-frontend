@@ -562,7 +562,9 @@ const loadDateAssets = async (date) => {
     const results = (res.success && res.data && res.data.results) ? res.data.results : []
     const mapped = results.map(a => ({
       ...a,
-      src: a.thumbnail_url || a.original_url || a.storage_url,
+      // Use smaller thumbnails for gallery grid (better performance)
+      // Prefer md (600px) for retina displays, fall back to sm (300px) or legacy thumbnail_url
+      src: a.thumbnail_urls?.md || a.thumbnail_urls?.sm || a.thumbnail_url || a.original_url || a.storage_url,
       width: a.width || 1920,
       height: a.height || 1080,
       alt: a.description || 'Photo'
@@ -716,32 +718,6 @@ const updateActiveOnScroll = () => {
     
     <!-- Main Content: Timeline with per-day lazy galleries -->
     <div v-else class="main-content-with-timeline">
-      <!-- Compact Timeline Slider -->
-      <div class="timeline-slider">
-        <div class="years">
-          <div class="to-top" @click="() => window.scrollTo({ top: 0, behavior: 'smooth' })">Top</div>
-          <div
-            v-for="(y, yi) in years"
-            :key="y"
-            class="year"
-            @click="() => scrollToYear(y)"
-          >
-            <span class="year-label" v-show="shouldShowYear(yi)">{{ y }}</span>
-            <div class="months">
-              <div
-                v-for="m in monthsByYear[y]"
-                :key="y + '-' + m"
-                class="month-tick"
-                :title="new Date(y, m, 1).toLocaleString('default', { month: 'short', year: 'numeric' })"
-                @click.stop="() => scrollToYearMonth(y, m)"
-                :class="{ active: activeYear === y && activeMonth === m }"
-              />
-            </div>
-            <div class="year-highlight" :class="{ active: activeYear === y }" />
-          </div>
-        </div>
-      </div>
-
       <!-- Photo Grid Content -->
       <div class="photo-grid-content" :class="{ 'sidebar-collapsed': sidebarCollapsed }" ref="contentRef">
         <div class="timeline-photos">
@@ -756,7 +732,7 @@ const updateActiveOnScroll = () => {
             <!-- Date Header -->
             <div class="date-header">
               <h2 class="date-title">{{ new Date(item.date).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }) }}</h2>
-              <div class="date-count">{{ item.count }} photos</div>
+              <div v-if="dateAssets[item.date]?.length" class="date-count">{{ dateAssets[item.date].length }} photo{{ dateAssets[item.date].length !== 1 ? 's' : '' }}</div>
             </div>
 
             <!-- Per-date Justified Gallery -->
@@ -832,145 +808,57 @@ const updateActiveOnScroll = () => {
   background: linear-gradient(135deg, #1a1f1a 0%, #1a2d1a 100%);
 }
 
-.main-content-with-timeline { display: grid; grid-template-columns: 56px 1fr; min-height: 100vh; width: 100%; }
-
-/* Compact slider timeline */
-.timeline-slider { width: 56px; border-right: 1px solid rgba(0, 0, 0, 0.06); background: rgba(255, 255, 255, 0.5); backdrop-filter: blur(6px); position: sticky; top: 64px; height: calc(100vh - 64px); overflow-y: hidden; display: grid; grid-template-columns: 1fr; z-index: 10; }
-.years { padding: 0.25rem; display: flex; flex-direction: column; gap: 0.5rem; }
-.to-top { font-size: 0.7rem; text-align: center; padding: 0.15rem 0; cursor: pointer; color: rgb(var(--v-theme-primary)); opacity: 0.8; }
-.to-top:hover { opacity: 1; }
-.main-content-with-timeline { align-items: start; }
-.year { display: flex; flex-direction: column; align-items: center; gap: 0.15rem; }
-.year-label { font-size: 0.75rem; font-weight: 600; color: rgb(var(--v-theme-on-surface)); opacity: 0.8; }
-.months { display: flex; flex-direction: column; gap: 1px; }
-.month-tick { width: 3px; height: 6px; background: rgba(var(--v-theme-primary), 0.35); border-radius: 1px; margin: 0 auto; cursor: pointer; }
-.month-tick:hover { background: rgb(var(--v-theme-primary)); }
-.month-tick.active { background: rgb(var(--v-theme-primary)); }
-.year-highlight { width: 24px; height: 2px; background: transparent; border-radius: 1px; }
-.year-highlight.active { background: rgba(var(--v-theme-primary), 0.6); }
-.progress-bar { grid-column: 2; position: sticky; top: 0; height: 100vh; background: rgba(0,0,0,0.05); }
-.progress { width: 100%; background: rgb(var(--v-theme-primary)); transition: height 0.15s linear; }
-
-.sidebar-toggle {
-  position: absolute;
-  top: 1rem;
-  right: 1rem;
-  z-index: 10;
-  background: rgba(255, 255, 255, 0.9) !important;
-  backdrop-filter: blur(10px);
+.main-content-with-timeline { 
+  min-height: 100vh; 
+  width: 100%; 
+  max-width: 100%; 
+  overflow: hidden; 
 }
 
-.timeline-nav {
-  padding: 1rem;
-  padding-top: 3rem;
-}
 
-.timeline-header {
-  margin-bottom: 1.5rem;
+.photo-grid-content { 
+  overflow-y: auto; 
+  overflow-x: hidden; 
+  transition: all 0.3s ease; 
+  overflow-anchor: none; 
+  width: 100%; 
+  max-width: 100%; 
+  box-sizing: border-box;
 }
-
-.total-count {
-  font-size: 0.875rem;
-  color: rgb(var(--v-theme-primary));
-  background: rgba(var(--v-theme-primary), 0.1);
-  padding: 0.25rem 0.75rem;
-  border-radius: 12px;
-  font-weight: 600;
-  display: inline-block;
-}
-
-.timeline-years {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-
-.timeline-year-group {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-}
-
-.timeline-year {
-  padding: 0.75rem;
-  border-radius: 8px;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  border: 1px solid transparent;
-}
-
-.timeline-year:hover {
-  background: rgba(var(--v-theme-primary), 0.1);
-  border-color: rgba(var(--v-theme-primary), 0.2);
-}
-
-.timeline-year.active {
-  background: rgba(var(--v-theme-primary), 0.15);
-  border-color: rgba(var(--v-theme-primary), 0.3);
-}
-
-.year-label {
-  font-weight: 600;
-  font-size: 1.1rem;
-  color: rgb(var(--v-theme-on-surface));
-}
-
-.year-count {
-  font-size: 0.875rem;
-  color: rgb(var(--v-theme-primary));
-  margin-top: 0.25rem;
-  font-weight: 600;
-}
-
-.timeline-months {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-  margin-left: 1rem;
-  padding-left: 0.5rem;
-  border-left: 2px solid rgba(var(--v-theme-primary), 0.2);
-}
-
-.timeline-month {
-  padding: 0.5rem 0.75rem;
-  border-radius: 3px;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.timeline-month:hover {
-  background: rgba(var(--v-theme-primary), 0.08);
-}
-
-.month-label {
-  font-size: 0.875rem;
-  color: rgb(var(--v-theme-on-surface));
-  font-weight: 500;
-}
-
-.month-count {
-  font-size: 0.75rem;
-  color: rgb(var(--v-theme-primary));
-  background: rgba(var(--v-theme-primary), 0.15);
-  padding: 0.125rem 0.5rem;
-  border-radius: 10px;
-  font-weight: 600;
-}
-
-.photo-grid-content { overflow-y: auto; transition: all 0.3s ease; overflow-anchor: none; width: 100%; }
 
 .photo-grid-content.sidebar-collapsed {
   margin-left: 0;
 }
 
-.timeline-photos { padding: 1rem; width: 100%; margin: 0; overflow-anchor: none; }
+.timeline-photos { 
+  padding: 1rem; 
+  width: 100%; 
+  max-width: 100%; 
+  margin: 0 auto;
+  overflow-anchor: none; 
+  box-sizing: border-box; 
+}
+
+.date-section {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  overflow: hidden;
+}
 
 .date-section { margin-bottom: 1.5rem; }
 
-.date-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.75rem; padding-bottom: 0.25rem; border-bottom: 2px solid rgba(var(--v-theme-primary), 0.2); }
+.date-header { 
+  display: flex; 
+  align-items: center; 
+  justify-content: space-between; 
+  margin-bottom: 0.75rem; 
+  padding-bottom: 0.25rem; 
+  border-bottom: 2px solid rgba(var(--v-theme-primary), 0.2);
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+}
 
 .date-title {
   font-size: 1.5rem;
@@ -989,6 +877,26 @@ const updateActiveOnScroll = () => {
 }
 
 /* JustifiedGallery component handles all photo grid styling */
+/* Ensure gallery doesn't overflow container */
+:deep(.jg-host) {
+  width: 100% !important;
+  max-width: 100% !important;
+  overflow: hidden !important;
+  box-sizing: border-box !important;
+}
+
+:deep(.jg-phantom) {
+  width: 100% !important;
+  max-width: 100% !important;
+  box-sizing: border-box !important;
+}
+
+:deep(.jg-row) {
+  width: 100% !important;
+  max-width: 100% !important;
+  overflow: hidden !important;
+  box-sizing: border-box !important;
+}
 
 .debug-info {
   position: fixed;
@@ -1019,15 +927,6 @@ const updateActiveOnScroll = () => {
   }
 }
 
-/* Dark theme adjustments */
-:deep(.v-theme--dark) .timeline-sidebar {
-  background: rgba(26, 26, 26, 0.95);
-  border-right-color: rgba(255, 255, 255, 0.12);
-}
-
-:deep(.v-theme--dark) .sidebar-toggle {
-  background: rgba(26, 26, 26, 0.9) !important;
-}
 
 /* Loading more and end of content indicators */
 .loading-more-container,
@@ -1121,27 +1020,14 @@ const updateActiveOnScroll = () => {
   font-style: italic;
 }
 
-/* Responsive adjustments for timeline */
+/* Responsive adjustments */
 @media (max-width: 768px) {
-  .timeline-sidebar {
-    position: fixed;
-    top: 0;
-    left: 0;
-    height: 100vh;
-    z-index: 1000;
-    transform: translateX(-100%);
-  }
-  
-  .timeline-sidebar:not(.collapsed) {
-    transform: translateX(0);
-  }
-  
   .photo-grid-content {
     width: 100%;
   }
   
   .timeline-photos {
-    padding: 1rem;
+    padding: 0.75rem;
   }
 }
 </style>

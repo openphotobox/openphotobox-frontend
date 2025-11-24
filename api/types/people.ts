@@ -10,6 +10,7 @@ export interface Person {
   headshot_url?: string
   face_count?: number
   photo_count?: number
+  candidate_count?: number
   
   created_at: string
   updated_at: string

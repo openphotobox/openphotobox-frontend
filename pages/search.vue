@@ -511,7 +511,7 @@ watch([selectedPeople, selectedAlbums, peopleMode, () => filters.value.visibilit
 // Justified Gallery mapping, preserves incoming order
 const jgImages = computed(() => {
   return displayResults.value.map(asset => ({
-    src: asset.thumbnail_url || asset.original_url || asset.storage_url,
+    src: asset.thumbnail_urls?.md || asset.thumbnail_urls?.sm || asset.thumbnail_url || asset.original_url || asset.storage_url,
     width: asset.width || 1920,
     height: asset.height || 1080,
     alt: asset.description || 'Photo',

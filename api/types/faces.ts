@@ -15,6 +15,7 @@ export interface FaceManualCreateData {
   y: number
   w: number
   h: number
+  person_id?: string
 }
 
 export interface FaceCandidate {
@@ -22,5 +23,13 @@ export interface FaceCandidate {
   person_name: string
   confidence: number
   headshot_url?: string
+}
+
+export interface FaceBulkConfirmData {
+  face_ids: string[]
+}
+
+export interface FaceBulkConfirmResponse {
+  updated: number
 }
 

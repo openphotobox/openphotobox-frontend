@@ -118,7 +118,7 @@
           <v-btn @click="showCreateDialog = false">Cancel</v-btn>
           <v-btn
             color="primary"
-            type="submit"
+            @click="createAlbum"
             :disabled="!createFormValid"
           >
             Create Album

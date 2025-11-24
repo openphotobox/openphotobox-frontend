@@ -132,15 +132,6 @@
         @keyup.enter="handleSearch"
       ></v-text-field>
 
-      <!-- Theme toggle -->
-      <v-btn
-        icon
-        class="me-2"
-        @click="toggleTheme"
-      >
-        <v-icon>{{ isDark ? 'mdi-weather-sunny' : 'mdi-weather-night' }}</v-icon>
-      </v-btn>
-
       <v-btn
         icon
         @click="navigateTo('/upload')"
@@ -201,17 +192,10 @@
 
 <script setup>
 import { useAuthStore } from '~/stores/auth'
-import { useTheme } from 'vuetify'
 
 const authStore = useAuthStore()
 const searchQuery = ref('')
 const stats = ref({ photos: 1247, people: 23, albums: 15 })
-
-const theme = useTheme()
-const isDark = computed(() => theme.global.current.value.dark)
-const toggleTheme = () => {
-  theme.global.name.value = isDark.value ? 'light' : 'dark'
-}
 
 const handleSearch = () => {
   if (searchQuery.value.trim()) {

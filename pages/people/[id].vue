@@ -2,7 +2,8 @@
 import ImageViewerV2 from '@/components/ImageViewerV2.vue'
 import JustifiedGallery from '@/components/JustifiedGallery.vue'
 definePageMeta({
-  middleware: ['setup', 'auth']
+  middleware: ['setup', 'auth'],
+  key: route => `person-${route.params.id}`
 })
 const route = useRoute()
 const api = useApi()
@@ -49,10 +50,16 @@ const loadPerson = async () => {
     }
     if (!aRes.success) throw new Error(aRes.error || 'Failed to load photos')
     const results = aRes.data?.results || aRes.data || []
-    personAssets.value = results.map((a: any) => ({
-      ...a,
-      faces: a.faces || []
-    }))
+    // Filter to only show assets with confirmed faces for this person
+    personAssets.value = results
+      .map((a: any) => ({
+        ...a,
+        // Filter faces to only show confirmed ones for THIS person
+        faces: (a.faces || []).filter((f: any) => 
+          f.person === currentId && f.confirmed === true
+        )
+      }))
+      .filter((a: any) => a.faces.length > 0) // Only include assets that have confirmed faces
   } catch (e: any) {
     error.value = e
   } finally {
@@ -191,6 +198,16 @@ const performMerge = async () => {
             {{ person.display_name }}
             <v-spacer></v-spacer>
             <v-btn
+              v-if="person.candidate_count && person.candidate_count > 0"
+              variant="tonal"
+              color="primary"
+              prepend-icon="mdi-account-question"
+              @click="navigateTo(`/people/candidates-${person.id}`)"
+              class="me-2"
+            >
+              Review Candidates ({{ person.candidate_count }})
+            </v-btn>
+            <v-btn
               variant="outlined"
               prepend-icon="mdi-pencil"
               @click="showEditDialog = true"
@@ -217,6 +234,16 @@ const performMerge = async () => {
             </div>
             <div class="text-caption text-grey">
               {{ person.asset_count || person.photo_count || personAssets.length }} photos
+            </div>
+            <div v-if="person.candidate_count && person.candidate_count > 0" class="mt-2">
+              <v-chip
+                size="small"
+                color="primary"
+                variant="tonal"
+                prepend-icon="mdi-account-question"
+              >
+                {{ person.candidate_count }} candidate{{ person.candidate_count !== 1 ? 's' : '' }} pending review
+              </v-chip>
             </div>
           </v-card-text>
         </v-card>

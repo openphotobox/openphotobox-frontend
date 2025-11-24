@@ -5,6 +5,7 @@ import { createApiClient } from '@/api/client'
 import { createAssetsApi } from '@/api/endpoints/assets'
 import { createAlbumsApi } from '@/api/endpoints/albums'
 import { createPeopleApi } from '@/api/endpoints/people'
+import { createFacesApi } from '@/api/endpoints/faces'
 import { createUtilsApi } from '@/api/endpoints/utils'
 import { createSetupApi } from '@/api/endpoints/setup'
 import { createStorageApi } from '@/api/endpoints/storage'
@@ -30,6 +31,7 @@ function createApi() {
   const assets = createAssetsApi(client)
   const albums = createAlbumsApi(client)
   const people = createPeopleApi(client)
+  const faces = createFacesApi(client)
   const utils = createUtilsApi(client)
   const setup = createSetupApi(client)
   const storage = createStorageApi(client)
@@ -39,6 +41,7 @@ function createApi() {
     assets,
     albums,
     people,
+    faces,
     utils,
     setup,
     storage,

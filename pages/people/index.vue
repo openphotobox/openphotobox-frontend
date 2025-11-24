@@ -82,6 +82,14 @@ const addPerson = async () => {
             <v-spacer></v-spacer>
             <v-btn
               variant="tonal"
+              prepend-icon="mdi-account-multiple-check"
+              class="me-2"
+              @click="navigateTo('/people/candidates')"
+            >
+              Review All Candidates
+            </v-btn>
+            <v-btn
+              variant="tonal"
               prepend-icon="mdi-account-alert"
               class="me-2"
               @click="navigateTo('/people/unassigned')"
@@ -145,7 +153,18 @@ const addPerson = async () => {
             </div>
           </v-card-text>
 
-          <v-card-actions class="justify-center pb-4">
+          <v-card-actions class="justify-center pb-4 flex-column">
+            <v-btn
+              v-if="person.candidate_count && person.candidate_count > 0"
+              variant="tonal"
+              color="primary"
+              size="small"
+              @click="navigateTo('/people/candidates-' + person.id)"
+              prepend-icon="mdi-account-question"
+              class="mb-2"
+            >
+              {{ person.candidate_count }} to review
+            </v-btn>
             <v-btn
               variant="outlined"
               size="small"
