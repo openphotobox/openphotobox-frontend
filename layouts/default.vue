@@ -2,9 +2,12 @@
   <v-app>
     <!-- Modern navigation drawer with better styling -->
     <v-navigation-drawer 
+      v-model="drawer"
       app 
       class="custom-drawer"
-      permanent
+      :permanent="!isMobile"
+      :temporary="isMobile"
+      :scrim="isMobile"
     >
       <v-list class="pa-4">
         <!-- App logo/brand -->
@@ -129,8 +132,17 @@
       elevation="0"
       class="custom-app-bar"
     >
-      <!-- Drawer is permanent; hide toggle -->
-      <div class="me-2" />
+      <v-btn
+        v-if="isMobile"
+        icon
+        variant="text"
+        class="me-2"
+        @click="drawer = !drawer"
+        aria-label="Toggle navigation"
+      >
+        <v-icon>mdi-menu</v-icon>
+      </v-btn>
+      <div v-else class="me-2" />
       
       <v-toolbar-title class="d-flex align-center">
         <v-icon class="me-2" color="primary">mdi-camera</v-icon>
@@ -213,6 +225,7 @@
 </template>
 
 <script setup lang="ts">
+import { useDisplay } from 'vuetify'
 import { useAuthStore } from '~/stores/auth'
 
 const authStore = useAuthStore()
@@ -220,6 +233,13 @@ const api = useApi()
 const searchQuery = ref('')
 const stats = ref({ photos: 0, people: 0, albums: 0 })
 const loadingStats = ref(false)
+const drawer = ref(true)
+const display = useDisplay()
+const isMobile = computed(() => display.mdAndDown.value)
+
+watch(isMobile, (mobile) => {
+  drawer.value = mobile ? false : true
+}, { immediate: true })
 
 const handleSearch = () => {
   if (searchQuery.value.trim()) {
@@ -286,6 +306,9 @@ onMounted(() => {
   background: linear-gradient(180deg, #f8f9fa 0%, #e9ecef 100%);
   border-right: 1px solid rgba(0, 0, 0, 0.12);
 }
+.custom-drawer :deep(.v-navigation-drawer__scrim) {
+  backdrop-filter: blur(6px);
+}
 
 .custom-app-bar {
   background: rgba(255, 255, 255, 0.95) !important;
@@ -323,6 +346,9 @@ onMounted(() => {
   background: rgba(255, 255, 255, 0.8);
   border-radius: 24px;
 }
+.custom-app-bar :deep(.v-toolbar-title) {
+  font-size: 1rem;
+}
 
 /* Dark theme adjustments */
 :deep(.v-theme--dark) .custom-drawer {
@@ -339,5 +365,15 @@ onMounted(() => {
 
 :deep(.v-theme--dark) .search-field {
   background: rgba(45, 45, 45, 0.8);
+}
+
+@media (max-width: 960px) {
+  .custom-app-bar {
+    padding-inline: 8px;
+  }
+  .search-field {
+    flex: 1;
+    max-width: none !important;
+  }
 }
 </style>

@@ -25,6 +25,18 @@
         </div>
         
         <div class="header-actions">
+          <v-btn
+            v-if="isMobile"
+            icon
+            variant="text"
+            color="white"
+            class="info-toggle-btn"
+            @click="toggleMobileInfo"
+            :aria-expanded="(!panelCollapsed).toString()"
+            aria-label="Toggle photo info"
+          >
+            <v-icon>mdi-information</v-icon>
+          </v-btn>
           <!-- Like button with count -->
           <div class="like-button-group">
             <v-btn
@@ -84,8 +96,20 @@
 
       <!-- Main Content Area -->
       <div class="viewer-main-content">
+        <div
+          v-if="isMobile && !panelCollapsed"
+          class="mobile-info-scrim"
+          @click="panelCollapsed = true"
+        ></div>
         <!-- Image Area -->
-        <div class="viewer-content" @click="handleContentClick">
+        <div
+          class="viewer-content"
+          @click="handleContentClick"
+          @touchstart.passive="onTouchStart"
+          @touchmove.passive="onTouchMove"
+          @touchend="onTouchEnd"
+          @touchcancel="resetSwipe"
+        >
           <!-- Navigation Arrows -->
           <v-btn
             v-if="hasPrevious"
@@ -154,9 +178,17 @@
         </div>
 
         <!-- Side Panel -->
-        <div class="side-panel" :class="{ 'collapsed': panelCollapsed }">
+        <div
+          class="side-panel"
+          :class="{
+            collapsed: panelCollapsed,
+            'mobile-panel': isMobile,
+            'mobile-panel-open': isMobile && !panelCollapsed
+          }"
+        >
           <!-- Panel Toggle Button -->
           <v-btn
+            v-if="!isMobile"
             icon
             variant="text"
             color="white"
@@ -585,6 +617,7 @@
 
 <script setup>
 import AlbumSelectorDialog from '~/components/AlbumSelectorDialog.vue'
+import { useDisplay } from 'vuetify'
 import { useAuthStore } from '~/stores/auth'
 
 const props = defineProps({
@@ -624,7 +657,36 @@ const authStore = useAuthStore()
 const detailedAsset = ref(props.asset)
 const currentAsset = computed(() => detailedAsset.value)
 const panelCollapsed = ref(false)
+const display = useDisplay()
+const isMobile = computed(() => display.mdAndDown.value)
 const showUnassigned = ref(false)
+watch(isMobile, (mobile) => {
+  panelCollapsed.value = mobile ? true : false
+}, { immediate: true })
+
+const toggleMobileInfo = () => {
+  if (!isMobile.value) return
+  panelCollapsed.value = !panelCollapsed.value
+}
+
+const lastBodyOverflow = ref('')
+const restoreBodyOverflow = () => {
+  if (typeof document === 'undefined') return
+  document.body.style.overflow = lastBodyOverflow.value || ''
+}
+
+watch(
+  () => isMobile.value && !panelCollapsed.value,
+  (open) => {
+    if (typeof document === 'undefined') return
+    if (open) {
+      lastBodyOverflow.value = document.body.style.overflow
+      document.body.style.overflow = 'hidden'
+    } else {
+      restoreBodyOverflow()
+    }
+  }
+)
 // Delete dialog state
 const deleteDialog = reactive({ open: false, loading: false, error: '' })
 // Album selector dialog state
@@ -640,6 +702,14 @@ const commentsLoading = ref(false)
 const commentText = ref('')
 const editingComment = ref(null)
 const showLikesDialog = ref(false)
+const swipeState = reactive({
+  startX: 0,
+  startY: 0,
+  deltaX: 0,
+  active: false
+})
+const swipeThreshold = 60
+const verticalTolerance = 80
 
 const confirmDelete = async () => {
   if (!currentAsset.value) return
@@ -820,6 +890,48 @@ const handleContentClick = (event) => {
   if (event.target.classList.contains('viewer-content')) {
     close()
   }
+}
+
+const resetSwipe = () => {
+  swipeState.startX = 0
+  swipeState.startY = 0
+  swipeState.deltaX = 0
+  swipeState.active = false
+}
+
+const onTouchStart = (event) => {
+  if (!isMobile.value || event.touches.length !== 1) return
+  if (addFaceMode.value && editFacesMode.value) return
+  const touch = event.touches[0]
+  swipeState.startX = touch.clientX
+  swipeState.startY = touch.clientY
+  swipeState.deltaX = 0
+  swipeState.active = true
+}
+
+const onTouchMove = (event) => {
+  if (!swipeState.active || event.touches.length !== 1) return
+  const touch = event.touches[0]
+  const deltaX = touch.clientX - swipeState.startX
+  const deltaY = touch.clientY - swipeState.startY
+  if (Math.abs(deltaY) > Math.abs(deltaX) && Math.abs(deltaY) > verticalTolerance) {
+    resetSwipe()
+    return
+  }
+  swipeState.deltaX = deltaX
+}
+
+const onTouchEnd = () => {
+  if (!swipeState.active) return
+  const deltaX = swipeState.deltaX
+  if (Math.abs(deltaX) >= swipeThreshold) {
+    if (deltaX > 0) {
+      goToPrevious()
+    } else {
+      goToNext()
+    }
+  }
+  resetSwipe()
 }
 
 const downloadPhoto = () => {
@@ -1304,6 +1416,7 @@ onMounted(() => {
 
 onUnmounted(() => {
   document.removeEventListener('keydown', handleKeydown)
+  restoreBodyOverflow()
 })
 
 // Watch for asset changes to fetch details
@@ -1405,6 +1518,7 @@ function cacheBustAssetFaces(asset) {
   flex: 1;
   display: flex;
   overflow: hidden;
+  position: relative;
 }
 
 .viewer-content {
@@ -1523,6 +1637,35 @@ function cacheBustAssetFaces(asset) {
 .panel-content {
   padding: 1.5rem;
   color: white;
+}
+
+.mobile-info-scrim {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 15;
+}
+
+.side-panel.mobile-panel {
+  width: 100%;
+  height: 60vh;
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  border-left: none;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  transform: translateY(100%);
+  transition: transform 0.3s ease;
+  z-index: 20;
+}
+
+.side-panel.mobile-panel.mobile-panel-open {
+  transform: translateY(0);
+}
+
+.side-panel.mobile-panel .panel-toggle {
+  display: none;
 }
 
 .info-section {
@@ -1751,26 +1894,6 @@ function cacheBustAssetFaces(asset) {
 @media (max-width: 768px) {
   .viewer-main-content {
     flex-direction: column;
-  }
-  
-  .side-panel {
-    width: 100%;
-    height: 40vh;
-    border-left: none;
-    border-top: 1px solid rgba(255, 255, 255, 0.1);
-    order: 2;
-  }
-  
-  .side-panel.collapsed {
-    height: 60px;
-    width: 100%;
-  }
-  
-  .panel-toggle {
-    top: 0.5rem;
-    right: 1rem;
-    left: auto;
-    transform: none;
   }
   
   .viewer-content {
