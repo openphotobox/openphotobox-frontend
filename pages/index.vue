@@ -1,5 +1,5 @@
 
-<script setup>
+<script setup lang="ts">
 // Require authentication and setup
 definePageMeta({
   middleware: ['setup', 'auth']
@@ -7,12 +7,16 @@ definePageMeta({
 
 // Import components
 import JustifiedGallery from '~/components/JustifiedGallery.vue'
+import AlbumSelectorDialog from '~/components/AlbumSelectorDialog.vue'
 
 // Using custom photo grid layout (Justified Gallery style)
 
 const api = useApi()
 const authStore = useAuthStore()
 const { $events } = useNuxtApp()
+
+// Check if user is admin
+const isAdmin = computed(() => authStore.isAdmin)
 
 // Fetch real assets from API with pagination
 const assets = ref([])
@@ -26,6 +30,11 @@ const showAssetDialog = ref(false)
 const selectedAsset = ref(null)
 const sidebarCollapsed = ref(true)
 const selectedYear = ref(null)
+
+// Selection mode
+const selectionMode = ref(false)
+const selectedAssetIds = ref<Set<string>>(new Set())
+const showAlbumSelector = ref(false)
 
 // JustifiedGallery component handles the layout algorithm
 
@@ -338,8 +347,55 @@ onUnmounted(() => {
 })
 
 const openAsset = (asset) => {
-  selectedAsset.value = asset
-  showAssetDialog.value = true
+  if (selectionMode.value) {
+    toggleSelection(asset.id)
+  } else {
+    selectedAsset.value = asset
+    showAssetDialog.value = true
+  }
+}
+
+const toggleSelectionMode = () => {
+  selectionMode.value = !selectionMode.value
+  if (!selectionMode.value) {
+    selectedAssetIds.value.clear()
+  }
+}
+
+const toggleSelection = (assetId: string) => {
+  if (selectedAssetIds.value.has(assetId)) {
+    selectedAssetIds.value.delete(assetId)
+  } else {
+    selectedAssetIds.value.add(assetId)
+  }
+}
+
+const isSelected = (assetId: string) => {
+  return selectedAssetIds.value.has(assetId)
+}
+
+const selectAll = () => {
+  for (const item of timelineItems.value) {
+    const arr = dateAssets[item.date]
+    if (Array.isArray(arr)) {
+      arr.forEach(asset => selectedAssetIds.value.add(asset.id))
+    }
+  }
+}
+
+const clearSelection = () => {
+  selectedAssetIds.value.clear()
+}
+
+const openAlbumSelectorForSelection = () => {
+  if (selectedAssetIds.value.size === 0) return
+  showAlbumSelector.value = true
+}
+
+const handlePhotosAddedToAlbum = () => {
+  // Clear selection after adding
+  clearSelection()
+  selectionMode.value = false
 }
 
 const formatDate = (dateString) => {
@@ -716,6 +772,41 @@ const updateActiveOnScroll = () => {
       </v-btn>
     </div>
     
+    <!-- Selection Mode Header -->
+    <v-app-bar
+      v-if="selectionMode"
+      color="primary"
+      density="compact"
+      elevation="2"
+      class="selection-bar"
+    >
+      <v-btn
+        icon="mdi-close"
+        @click="toggleSelectionMode"
+      ></v-btn>
+      
+      <v-toolbar-title>
+        {{ selectedAssetIds.size }} selected
+      </v-toolbar-title>
+      
+      <v-spacer></v-spacer>
+      
+      <v-btn
+        variant="text"
+        @click="selectAll"
+      >
+        Select All
+      </v-btn>
+      
+      <v-btn
+        variant="text"
+        @click="clearSelection"
+        :disabled="selectedAssetIds.size === 0"
+      >
+        Clear
+      </v-btn>
+    </v-app-bar>
+
     <!-- Main Content: Timeline with per-day lazy galleries -->
     <div v-else class="main-content-with-timeline">
       <!-- Photo Grid Content -->
@@ -735,17 +826,36 @@ const updateActiveOnScroll = () => {
               <div v-if="dateAssets[item.date]?.length" class="date-count">{{ dateAssets[item.date].length }} photo{{ dateAssets[item.date].length !== 1 ? 's' : '' }}</div>
             </div>
 
-            <!-- Per-date Justified Gallery -->
-            <JustifiedGallery
-              v-if="dateAssets[item.date]?.length"
-              :images="dateAssets[item.date]"
-              :targetRowHeight="220"
-              :gap="4"
-              :overscanPx="800"
-              :externalScrollEl="'.photo-grid-content'"
-              lastRow="left"
-              @item-click="openAsset"
-            />
+            <!-- Per-date Justified Gallery with selection overlay -->
+            <div v-if="dateAssets[item.date]?.length" class="gallery-wrapper" :class="{ 'selection-active': selectionMode }">
+              <JustifiedGallery
+                :images="dateAssets[item.date]"
+                :targetRowHeight="220"
+                :gap="4"
+                :overscanPx="800"
+                :externalScrollEl="'.photo-grid-content'"
+                lastRow="left"
+                @item-click="openAsset"
+              />
+              
+              <!-- Selection overlays -->
+              <div v-if="selectionMode && dateAssets[item.date]" class="selection-overlays">
+                <div
+                  v-for="asset in dateAssets[item.date]"
+                  :key="asset.id"
+                  class="selection-overlay"
+                  :class="{ 'selected': isSelected(asset.id) }"
+                  @click="toggleSelection(asset.id)"
+                >
+                  <v-checkbox
+                    :model-value="isSelected(asset.id)"
+                    color="primary"
+                    hide-details
+                    @click.stop="toggleSelection(asset.id)"
+                  ></v-checkbox>
+                </div>
+              </div>
+            </div>
 
             <div v-else class="loading-more-container">
               <v-progress-circular size="32" color="primary" indeterminate></v-progress-circular>
@@ -757,11 +867,59 @@ const updateActiveOnScroll = () => {
     </div>
     
 
+    <!-- Floating Action Buttons (admin only) -->
+    <div v-if="isAdmin" class="fab-container">
+      <!-- Selection Mode FAB -->
+      <v-btn
+        v-if="!selectionMode"
+        icon
+        size="large"
+        color="primary"
+        class="fab-button"
+        @click="toggleSelectionMode"
+      >
+        <v-icon>mdi-checkbox-multiple-marked</v-icon>
+        <v-tooltip activator="parent" location="left">
+          Select Photos
+        </v-tooltip>
+      </v-btn>
+      
+      <!-- Add to Album FAB (shown when photos are selected) -->
+      <v-btn
+        v-if="selectionMode && selectedAssetIds.size > 0"
+        icon
+        size="large"
+        color="success"
+        class="fab-button fab-album"
+        @click="openAlbumSelectorForSelection"
+      >
+        <v-badge
+          :content="selectedAssetIds.size"
+          color="error"
+          overlap
+        >
+          <v-icon>mdi-folder-plus</v-icon>
+        </v-badge>
+        <v-tooltip activator="parent" location="left">
+          Add to Album
+        </v-tooltip>
+      </v-btn>
+    </div>
+
+    <!-- Album Selector Dialog -->
+    <AlbumSelectorDialog
+      v-model="showAlbumSelector"
+      :asset-ids="Array.from(selectedAssetIds)"
+      @added="handlePhotosAddedToAlbum"
+    />
+
     <!-- Image Viewer V2 -->
     <ImageViewerV2
       v-model="showAssetDialog"
       :asset="selectedAsset"
       :assets="viewerAssets"
+      :show-delete="isAdmin"
+      :show-add-to-album="isAdmin"
       @asset-changed="handleAssetChanged"
       @asset-deleted="handleAssetDeleted"
     />
@@ -924,6 +1082,84 @@ const updateActiveOnScroll = () => {
 @media (max-width: 480px) {
   .date-title {
     font-size: 1.1rem;
+  }
+}
+
+/* Selection mode styles */
+.selection-bar {
+  position: fixed !important;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 1000;
+}
+
+.gallery-wrapper {
+  position: relative;
+}
+
+.selection-overlays {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  pointer-events: none;
+  z-index: 10;
+}
+
+.selection-overlay {
+  position: absolute;
+  pointer-events: auto;
+  cursor: pointer;
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-end;
+  padding: 8px;
+  transition: background-color 0.2s;
+}
+
+.selection-overlay:hover {
+  background-color: rgba(0, 0, 0, 0.1);
+}
+
+.selection-overlay.selected {
+  background-color: rgba(var(--v-theme-primary), 0.2);
+}
+
+.selection-overlay :deep(.v-checkbox) {
+  background-color: white;
+  border-radius: 50%;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+/* FAB styles */
+.fab-container {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.fab-button {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15) !important;
+}
+
+.fab-album {
+  animation: slideIn 0.3s ease-out;
+}
+
+@keyframes slideIn {
+  from {
+    transform: translateX(100px);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
   }
 }
 

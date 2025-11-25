@@ -10,6 +10,9 @@ import { createUtilsApi } from '@/api/endpoints/utils'
 import { createSetupApi } from '@/api/endpoints/setup'
 import { createStorageApi } from '@/api/endpoints/storage'
 import { createUploadApi } from '@/api/endpoints/upload'
+import { createUsersApi } from '@/api/endpoints/users'
+import { createCommentsApi } from '@/api/endpoints/comments'
+import { createLikesApi } from '@/api/endpoints/likes'
 
 function createApi() {
   // Get runtime config for API base URL
@@ -36,6 +39,9 @@ function createApi() {
   const setup = createSetupApi(client)
   const storage = createStorageApi(client)
   const upload = createUploadApi(client)
+  const users = createUsersApi(client)
+  const comments = createCommentsApi(client)
+  const likes = createLikesApi(client)
   
   return {
     assets,
@@ -46,6 +52,9 @@ function createApi() {
     setup,
     storage,
     upload,
+    users,
+    comments,
+    likes,
     client,
   }
 }

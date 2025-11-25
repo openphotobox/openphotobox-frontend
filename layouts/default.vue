@@ -44,6 +44,14 @@
         ></v-list-item>
         
         <v-list-item 
+          to="/liked" 
+          prepend-icon="mdi-heart" 
+          title="Liked"
+          class="nav-item mb-2"
+          rounded="lg"
+        ></v-list-item>
+        
+        <v-list-item 
           to="/search" 
           prepend-icon="mdi-magnify" 
           title="Search"
@@ -51,21 +59,24 @@
           rounded="lg"
         ></v-list-item>
         
-        <v-list-item 
-          to="/upload" 
-          prepend-icon="mdi-cloud-upload" 
-          title="Upload"
-          class="nav-item mb-2"
-          rounded="lg"
-        ></v-list-item>
+        <!-- Admin-only links -->
+        <template v-if="authStore.isAdmin">
+          <v-list-item 
+            to="/upload" 
+            prepend-icon="mdi-cloud-upload" 
+            title="Upload"
+            class="nav-item mb-2"
+            rounded="lg"
+          ></v-list-item>
 
-        <v-list-item 
-          to="/utilities" 
-          prepend-icon="mdi-tools" 
-          title="Utilities"
-          class="nav-item mb-2"
-          rounded="lg"
-        ></v-list-item>
+          <v-list-item 
+            to="/utilities" 
+            prepend-icon="mdi-tools" 
+            title="Utilities"
+            class="nav-item mb-2"
+            rounded="lg"
+          ></v-list-item>
+        </template>
 
         <v-divider class="my-4"></v-divider>
 
@@ -87,18 +98,27 @@
         <!-- Quick stats -->
         <div class="pa-4">
           <div class="text-caption text-medium-emphasis mb-2">Quick Stats</div>
-          <div class="d-flex justify-space-between mb-2">
-            <span class="text-caption">Photos</span>
-            <span class="text-caption font-weight-medium">{{ stats.photos || 0 }}</span>
-          </div>
-          <div class="d-flex justify-space-between mb-2">
-            <span class="text-caption">People</span>
-            <span class="text-caption font-weight-medium">{{ stats.people || 0 }}</span>
-          </div>
-          <div class="d-flex justify-space-between">
-            <span class="text-caption">Albums</span>
-            <span class="text-caption font-weight-medium">{{ stats.albums || 0 }}</span>
-          </div>
+          
+          <template v-if="loadingStats">
+            <v-skeleton-loader type="text" class="mb-2"></v-skeleton-loader>
+            <v-skeleton-loader type="text" class="mb-2"></v-skeleton-loader>
+            <v-skeleton-loader type="text"></v-skeleton-loader>
+          </template>
+          
+          <template v-else>
+            <div class="d-flex justify-space-between mb-2">
+              <span class="text-caption">Photos</span>
+              <span class="text-caption font-weight-medium">{{ stats.photos.toLocaleString() }}</span>
+            </div>
+            <div class="d-flex justify-space-between mb-2">
+              <span class="text-caption">People</span>
+              <span class="text-caption font-weight-medium">{{ stats.people.toLocaleString() }}</span>
+            </div>
+            <div class="d-flex justify-space-between">
+              <span class="text-caption">Albums</span>
+              <span class="text-caption font-weight-medium">{{ stats.albums.toLocaleString() }}</span>
+            </div>
+          </template>
         </div>
       </v-list>
     </v-navigation-drawer>
@@ -132,7 +152,9 @@
         @keyup.enter="handleSearch"
       ></v-text-field>
 
+      <!-- Upload button (admin only) -->
       <v-btn
+        v-if="authStore.isAdmin"
         icon
         @click="navigateTo('/upload')"
         title="Upload Photos"
@@ -190,18 +212,73 @@
   </v-app>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { useAuthStore } from '~/stores/auth'
 
 const authStore = useAuthStore()
+const api = useApi()
 const searchQuery = ref('')
-const stats = ref({ photos: 1247, people: 23, albums: 15 })
+const stats = ref({ photos: 0, people: 0, albums: 0 })
+const loadingStats = ref(false)
 
 const handleSearch = () => {
   if (searchQuery.value.trim()) {
     navigateTo(`/search?q=${encodeURIComponent(searchQuery.value.trim())}`)
   }
 }
+
+const loadStats = async () => {
+  loadingStats.value = true
+  try {
+    // Fetch counts from each API endpoint
+    // Note: These APIs use cursor pagination without count, so we need to fetch all items
+    const [assetsRes, peopleRes, albumsRes] = await Promise.all([
+      api.assets.list({ limit: 1000 }), // Get up to 1000 to count
+      api.people.list({ limit: 1000 }),
+      api.albums.list({ limit: 1000 })
+    ])
+
+    // Extract counts from responses
+    if (assetsRes.success) {
+      const data = assetsRes.data as any
+      // Assets uses cursor pagination with results array
+      if (data?.results && Array.isArray(data.results)) {
+        stats.value.photos = data.results.length
+      } else if (Array.isArray(data)) {
+        stats.value.photos = data.length
+      }
+    }
+
+    if (peopleRes.success) {
+      const data = peopleRes.data as any
+      // People returns a plain array
+      if (Array.isArray(data)) {
+        stats.value.people = data.length
+      } else if (data?.results && Array.isArray(data.results)) {
+        stats.value.people = data.results.length
+      }
+    }
+
+    if (albumsRes.success) {
+      const data = albumsRes.data as any
+      // Albums uses cursor pagination with results array
+      if (data?.results && Array.isArray(data.results)) {
+        stats.value.albums = data.results.length
+      } else if (Array.isArray(data)) {
+        stats.value.albums = data.length
+      }
+    }
+  } catch (error) {
+    console.error('Failed to load stats:', error)
+  } finally {
+    loadingStats.value = false
+  }
+}
+
+// Load stats on mount
+onMounted(() => {
+  loadStats()
+})
 </script>
 
 <style scoped>

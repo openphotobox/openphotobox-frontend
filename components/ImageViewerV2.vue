@@ -25,8 +25,44 @@
         </div>
         
         <div class="header-actions">
+          <!-- Like button with count -->
+          <div class="like-button-group">
+            <v-btn
+              icon
+              variant="text"
+              color="white"
+              @click="toggleLike"
+              :disabled="!currentAsset || likesLoading"
+            >
+              <v-icon :color="currentAsset?.liked_by_user ? 'red' : 'white'">
+                {{ currentAsset?.liked_by_user ? 'mdi-heart' : 'mdi-heart-outline' }}
+              </v-icon>
+            </v-btn>
+            
+            <!-- Like count (clickable to show who liked) -->
+            <span
+              v-if="currentAsset?.likes_count"
+              class="like-count"
+              @click="showLikesDialog = true"
+            >
+              {{ currentAsset.likes_count }}
+            </span>
+          </div>
+          
+          <!-- Add to Album -->
+          <v-btn
+            v-if="showAddToAlbum"
+            icon
+            variant="text"
+            color="white"
+            @click="showAlbumSelector = true"
+            :disabled="!currentAsset"
+          >
+            <v-icon>mdi-folder-plus</v-icon>
+          </v-btn>
           <!-- Delete photo -->
           <v-btn
+            v-if="showDelete"
             icon
             variant="text"
             color="red-lighten-2"
@@ -142,16 +178,6 @@
                 <div class="info-item">
                   <span class="info-label">📅 Date Taken</span>
                   <span class="info-value">{{ formatDate(currentAsset.taken_at) || 'Unknown' }}</span>
-                </div>
-                
-                <div class="info-item">
-                  <span class="info-label">⬆️ Date Uploaded</span>
-                  <span class="info-value">{{ formatDate(currentAsset.created_at) || 'Unknown' }}</span>
-                </div>
-                
-                <div v-if="currentAsset.mime_type" class="info-item">
-                  <span class="info-label">📁 File Type</span>
-                  <span class="info-value">{{ currentAsset.mime_type }}</span>
                 </div>
               </div>
             </div>
@@ -304,12 +330,101 @@
                       <div class="person-info">
                         <div class="person-name">Unknown</div>
                         <div class="person-actions mt-1">
-                          <v-btn v-if="editFacesMode" size="x-small" variant="tonal" color="primary" @click.stop="openAssignDialog(face)">Assign</v-btn>
+                          <v-btn size="x-small" variant="tonal" color="primary" @click.stop="openAssignDialog(face)">Assign</v-btn>
                           <v-btn v-if="editFacesMode" size="x-small" variant="text" color="error" class="ms-1" @click.stop="deleteFace(face)">Delete</v-btn>
                         </div>
                       </div>
                     </div>
                   </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Comments Section -->
+            <div class="info-section mt-4">
+              <h3 class="section-title">
+                <v-icon class="me-2">mdi-comment-multiple</v-icon>
+                Comments ({{ currentAsset?.comments_count || 0 }})
+              </h3>
+              
+              <!-- Comments list -->
+              <div class="comments-container">
+                <div v-if="commentsLoading" class="text-center py-4">
+                  <v-progress-circular indeterminate size="24"></v-progress-circular>
+                </div>
+                
+                <div v-else-if="!currentAsset?.comments || currentAsset.comments.length === 0" class="empty-comments-message">
+                  No comments yet. Be the first to comment!
+                </div>
+                
+                <div v-else class="comments-list">
+                  <div
+                    v-for="comment in currentAsset.comments"
+                    :key="comment.id"
+                    class="comment-item"
+                  >
+                    <v-avatar size="32" color="rgba(255, 255, 255, 0.1)">
+                      <v-icon size="20" color="rgba(255, 255, 255, 0.7)">mdi-account-circle</v-icon>
+                    </v-avatar>
+                    <div class="comment-content">
+                      <div class="comment-header">
+                        <strong class="comment-author">{{ comment.user_username || comment.user_name || `User ${comment.user}` }}</strong>
+                        <span class="comment-time">
+                          {{ formatRelativeTime(comment.created_at) }}
+                        </span>
+                      </div>
+                      
+                      <!-- Edit mode -->
+                      <div v-if="editingComment?.id === comment.id">
+                        <v-textarea
+                          v-model="editingComment.content"
+                          variant="outlined"
+                          density="compact"
+                          rows="2"
+                          auto-grow
+                          class="mt-1"
+                        ></v-textarea>
+                        <div class="d-flex gap-2 mt-1">
+                          <v-btn size="small" color="primary" @click="saveComment">Save</v-btn>
+                          <v-btn size="small" variant="text" @click="editingComment = null">Cancel</v-btn>
+                        </div>
+                      </div>
+                      
+                      <!-- View mode -->
+                      <div v-else>
+                        <div class="comment-text">{{ comment.content }}</div>
+                        <div v-if="authStore.user?.id === comment.user" class="comment-actions">
+                          <v-btn size="x-small" variant="text" class="text-none" style="opacity: 0.7;" @click="editComment(comment)">Edit</v-btn>
+                          <v-btn size="x-small" variant="text" color="error" class="text-none" style="opacity: 0.7;" @click="deleteComment(comment.id)">Delete</v-btn>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              
+              <!-- Add comment -->
+              <div class="add-comment mt-4">
+                <v-textarea
+                  v-model="commentText"
+                  variant="outlined"
+                  density="compact"
+                  placeholder="Add a comment..."
+                  rows="2"
+                  auto-grow
+                  :disabled="commentsLoading"
+                  hide-details
+                ></v-textarea>
+                <div class="d-flex justify-end mt-2">
+                  <v-btn
+                    color="primary"
+                    size="small"
+                    :disabled="!commentText.trim() || commentsLoading"
+                    :loading="commentsLoading"
+                    @click="addComment"
+                  >
+                    Post Comment
+                  </v-btn>
                 </div>
               </div>
             </div>
@@ -431,9 +546,47 @@
       </v-card-actions>
     </v-card>
   </v-dialog>
+
+  <!-- Album Selector Dialog -->
+  <AlbumSelectorDialog
+    v-model="showAlbumSelector"
+    :asset-ids="currentAssetIds"
+  />
+
+  <!-- Likes Dialog -->
+  <v-dialog v-model="showLikesDialog" max-width="400">
+    <v-card>
+      <v-card-title class="d-flex align-center">
+        <v-icon color="red" class="me-2">mdi-heart</v-icon>
+        Liked by {{ currentAsset?.likes_count || 0 }}
+      </v-card-title>
+      <v-card-text>
+        <v-list v-if="currentAsset?.likes && currentAsset.likes.length > 0">
+          <v-list-item v-for="username in currentAsset.likes" :key="username">
+            <template v-slot:prepend>
+              <v-avatar size="32" color="primary">
+                <span class="text-white">{{ username.charAt(0).toUpperCase() }}</span>
+              </v-avatar>
+            </template>
+            <v-list-item-title>{{ username }}</v-list-item-title>
+          </v-list-item>
+        </v-list>
+        <div v-else class="text-caption text-medium-emphasis py-4">
+          No likes yet
+        </div>
+      </v-card-text>
+      <v-card-actions>
+        <v-spacer></v-spacer>
+        <v-btn @click="showLikesDialog = false">Close</v-btn>
+      </v-card-actions>
+    </v-card>
+  </v-dialog>
 </template>
 
 <script setup>
+import AlbumSelectorDialog from '~/components/AlbumSelectorDialog.vue'
+import { useAuthStore } from '~/stores/auth'
+
 const props = defineProps({
   modelValue: {
     type: Boolean,
@@ -446,6 +599,14 @@ const props = defineProps({
   assets: {
     type: Array,
     default: () => []
+  },
+  showDelete: {
+    type: Boolean,
+    default: true
+  },
+  showAddToAlbum: {
+    type: Boolean,
+    default: true
   }
 })
 
@@ -457,7 +618,8 @@ const isOpen = computed({
   set: (value) => emit('update:modelValue', value)
 })
 
-const { assets: assetsApi, people, faces, utils } = useApi()
+const { assets: assetsApi, people, faces, utils, comments, likes } = useApi()
+const authStore = useAuthStore()
 
 const detailedAsset = ref(props.asset)
 const currentAsset = computed(() => detailedAsset.value)
@@ -465,6 +627,19 @@ const panelCollapsed = ref(false)
 const showUnassigned = ref(false)
 // Delete dialog state
 const deleteDialog = reactive({ open: false, loading: false, error: '' })
+// Album selector dialog state
+const showAlbumSelector = ref(false)
+
+const currentAssetIds = computed(() => {
+  return currentAsset.value ? [currentAsset.value.id] : []
+})
+
+// Likes and comments state
+const likesLoading = ref(false)
+const commentsLoading = ref(false)
+const commentText = ref('')
+const editingComment = ref(null)
+const showLikesDialog = ref(false)
 
 const confirmDelete = async () => {
   if (!currentAsset.value) return
@@ -658,6 +833,147 @@ const downloadPhoto = () => {
   }
 }
 
+// Toggle like/unlike
+const toggleLike = async () => {
+  if (!currentAsset.value || likesLoading.value) return
+  
+  likesLoading.value = true
+  const assetId = currentAsset.value.id
+  const wasLiked = currentAsset.value.liked_by_user
+  
+  try {
+    if (wasLiked) {
+      // Unlike: need to find the like ID first
+      const likesRes = await likes.list({ asset: assetId })
+      if (likesRes.success && likesRes.data) {
+        const results = likesRes.data.results || likesRes.data
+        const userLike = Array.isArray(results) ? results.find(like => like.user === authStore.user?.id) : null
+        
+        if (userLike) {
+          const res = await likes.delete(userLike.id)
+          if (res.success) {
+            // Optimistically update UI
+            if (currentAsset.value) {
+              currentAsset.value.liked_by_user = false
+              currentAsset.value.likes_count = Math.max(0, (currentAsset.value.likes_count || 0) - 1)
+              // Remove current user from likes array
+              if (currentAsset.value.likes && authStore.user?.username) {
+                currentAsset.value.likes = currentAsset.value.likes.filter(u => u !== authStore.user.username)
+              }
+            }
+          }
+        }
+      }
+    } else {
+      // Like
+      const res = await likes.create({ asset: assetId })
+      if (res.success) {
+        // Optimistically update UI
+        if (currentAsset.value) {
+          currentAsset.value.liked_by_user = true
+          currentAsset.value.likes_count = (currentAsset.value.likes_count || 0) + 1
+          // Add current user to likes array
+          if (!currentAsset.value.likes) currentAsset.value.likes = []
+          if (authStore.user?.username) {
+            currentAsset.value.likes.push(authStore.user.username)
+          }
+        }
+      }
+    }
+    
+    // Refresh the asset to get accurate data
+    const refreshed = await assetsApi.get(assetId)
+    if (refreshed && refreshed.success && refreshed.data) {
+      detailedAsset.value = cacheBustAssetFaces({ ...currentAsset.value, ...refreshed.data })
+    }
+  } catch (error) {
+    console.error('Failed to toggle like:', error)
+  } finally {
+    likesLoading.value = false
+  }
+}
+
+// Add comment
+const addComment = async () => {
+  if (!currentAsset.value || !commentText.value.trim() || commentsLoading.value) return
+  
+  commentsLoading.value = true
+  try {
+    const res = await comments.create({
+      asset: currentAsset.value.id,
+      content: commentText.value.trim()
+    })
+    
+    if (res.success && res.data) {
+      // Update UI
+      if (!currentAsset.value.comments) currentAsset.value.comments = []
+      currentAsset.value.comments.push(res.data)
+      currentAsset.value.comments_count = (currentAsset.value.comments_count || 0) + 1
+      commentText.value = ''
+      
+      // Refresh asset to get complete data
+      const refreshed = await assetsApi.get(currentAsset.value.id)
+      if (refreshed && refreshed.success && refreshed.data) {
+        detailedAsset.value = cacheBustAssetFaces({ ...currentAsset.value, ...refreshed.data })
+      }
+    }
+  } catch (error) {
+    console.error('Failed to add comment:', error)
+  } finally {
+    commentsLoading.value = false
+  }
+}
+
+// Edit comment
+const editComment = (comment) => {
+  editingComment.value = { ...comment }
+}
+
+// Save edited comment
+const saveComment = async () => {
+  if (!editingComment.value || !editingComment.value.content.trim() || commentsLoading.value) return
+  
+  commentsLoading.value = true
+  try {
+    const res = await comments.update(editingComment.value.id, {
+      content: editingComment.value.content.trim()
+    })
+    
+    if (res.success && res.data && currentAsset.value) {
+      // Update the comment in the list
+      const index = currentAsset.value.comments?.findIndex(c => c.id === editingComment.value.id)
+      if (index !== undefined && index >= 0 && currentAsset.value.comments) {
+        currentAsset.value.comments[index] = res.data
+      }
+      editingComment.value = null
+    }
+  } catch (error) {
+    console.error('Failed to save comment:', error)
+  } finally {
+    commentsLoading.value = false
+  }
+}
+
+// Delete comment
+const deleteComment = async (commentId) => {
+  if (!currentAsset.value || commentsLoading.value) return
+  
+  commentsLoading.value = true
+  try {
+    const res = await comments.delete(commentId)
+    
+    if (res.success && currentAsset.value) {
+      // Remove comment from list
+      currentAsset.value.comments = currentAsset.value.comments?.filter(c => c.id !== commentId)
+      currentAsset.value.comments_count = Math.max(0, (currentAsset.value.comments_count || 0) - 1)
+    }
+  } catch (error) {
+    console.error('Failed to delete comment:', error)
+  } finally {
+    commentsLoading.value = false
+  }
+}
+
 const formatDate = (dateString) => {
   if (!dateString) return ''
   return new Date(dateString).toLocaleDateString('en-US', {
@@ -666,6 +982,35 @@ const formatDate = (dateString) => {
     day: 'numeric',
     hour: '2-digit',
     minute: '2-digit'
+  })
+}
+
+const formatRelativeTime = (dateString) => {
+  if (!dateString) return ''
+  
+  const date = new Date(dateString)
+  const now = new Date()
+  const seconds = Math.floor((now.getTime() - date.getTime()) / 1000)
+  
+  if (seconds < 60) return 'just now'
+  
+  const minutes = Math.floor(seconds / 60)
+  if (minutes < 60) return `${minutes}m ago`
+  
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return `${hours}h ago`
+  
+  const days = Math.floor(hours / 24)
+  if (days < 7) return `${days}d ago`
+  
+  const weeks = Math.floor(days / 7)
+  if (weeks < 4) return `${weeks}w ago`
+  
+  // For older dates, show short date format
+  return date.toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: date.getFullYear() !== now.getFullYear() ? 'numeric' : undefined
   })
 }
 
@@ -1169,14 +1514,14 @@ function cacheBustAssetFaces(asset) {
 .panel-toggle {
   position: absolute;
   top: 1rem;
-  left: 1rem;
+  right: 1rem;
   z-index: 10;
   background: rgba(0, 0, 0, 0.5) !important;
   backdrop-filter: blur(10px);
 }
 
 .panel-content {
-  padding: 3rem 1.5rem 1.5rem;
+  padding: 1.5rem;
   color: white;
 }
 
@@ -1261,6 +1606,137 @@ function cacheBustAssetFaces(asset) {
 
 .img-wrap { position: relative; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; }
 
+.like-button-group {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.like-count {
+  color: white;
+  font-size: 0.875rem;
+  font-weight: 500;
+  padding: 0.25rem 0.5rem;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.1);
+  cursor: pointer;
+  transition: background 0.2s ease;
+  min-width: 24px;
+  text-align: center;
+}
+
+.like-count:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+/* Comments Styling */
+.comments-container {
+  margin-top: 1rem;
+}
+
+.empty-comments-message {
+  text-align: center;
+  padding: 2rem 1rem;
+  font-size: 0.875rem;
+  color: rgba(255, 255, 255, 0.7);
+  font-style: italic;
+}
+
+.comments-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  max-height: 400px;
+  overflow-y: auto;
+  padding-right: 0.5rem;
+}
+
+.comments-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.comments-list::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 3px;
+}
+
+.comments-list::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 3px;
+}
+
+.comments-list::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.comment-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.03);
+  transition: background 0.2s ease;
+}
+
+.comment-item:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.comment-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.comment-header {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  margin-bottom: 0.25rem;
+  flex-wrap: wrap;
+}
+
+.comment-author {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: white;
+}
+
+.comment-time {
+  font-size: 0.75rem;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.comment-text {
+  font-size: 0.875rem;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.9);
+  word-wrap: break-word;
+  white-space: pre-wrap;
+}
+
+.comment-actions {
+  display: flex;
+  gap: 0.25rem;
+  margin-top: 0.5rem;
+}
+
+.comment-actions .v-btn {
+  min-width: auto;
+  padding: 0 0.5rem;
+  height: 24px;
+  font-size: 0.75rem;
+}
+
+.comment-actions .v-btn:hover {
+  opacity: 1 !important;
+}
+
+.add-comment {
+  padding-top: 1rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
 /* Responsive adjustments */
 @media (max-width: 1024px) {
   .side-panel {
@@ -1268,7 +1744,7 @@ function cacheBustAssetFaces(asset) {
   }
   
   .panel-content {
-    padding: 3rem 1rem 1rem;
+    padding: 1rem;
   }
 }
 
@@ -1292,8 +1768,9 @@ function cacheBustAssetFaces(asset) {
   
   .panel-toggle {
     top: 0.5rem;
-    left: 50%;
-    transform: translateX(-50%);
+    right: 1rem;
+    left: auto;
+    transform: none;
   }
   
   .viewer-content {

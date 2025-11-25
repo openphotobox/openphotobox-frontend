@@ -12,6 +12,47 @@
         </v-col>
       </v-row>
 
+      <!-- Quick Actions Card -->
+      <v-row>
+        <v-col cols="12" md="6">
+          <v-card class="mb-4">
+            <v-card-title class="d-flex align-center">
+              <v-icon class="me-2">mdi-lightning-bolt</v-icon>
+              Quick Actions
+            </v-card-title>
+            <v-card-text>
+              <v-list>
+                <v-list-item
+                  prepend-icon="mdi-account-multiple"
+                  title="Manage Users"
+                  subtitle="Create, edit, and delete user accounts"
+                  @click="navigateTo('/admin/users')"
+                  class="cursor-pointer"
+                >
+                  <template v-slot:append>
+                    <v-icon>mdi-chevron-right</v-icon>
+                  </template>
+                </v-list-item>
+                
+                <v-divider class="my-2"></v-divider>
+                
+                <v-list-item
+                  prepend-icon="mdi-cloud-upload"
+                  title="Upload Photos"
+                  subtitle="Add new photos to your library"
+                  @click="navigateTo('/admin/upload')"
+                  class="cursor-pointer"
+                >
+                  <template v-slot:append>
+                    <v-icon>mdi-chevron-right</v-icon>
+                  </template>
+                </v-list-item>
+              </v-list>
+            </v-card-text>
+          </v-card>
+        </v-col>
+      </v-row>
+
       <!-- Storage Status Card -->
       <v-row>
         <v-col cols="12">

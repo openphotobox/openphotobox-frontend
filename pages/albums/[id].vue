@@ -1,10 +1,17 @@
 <script setup lang="ts">
 console.log("TEST")
 import JustifiedGallery from '~/components/JustifiedGallery.vue'
+import ImageViewerV2 from '~/components/ImageViewerV2.vue'
+import { useAuthStore } from '~/stores/auth'
+
 const route = useRoute()
 const router = useRouter()
 const albumId = computed(() => route.params.id as string)
 const api = useApi()
+const authStore = useAuthStore()
+
+// Check if user is admin
+const isAdmin = computed(() => authStore.isAdmin)
 
 const album = ref<any>(null)
 const albumAssets = ref<any[]>([])
@@ -16,9 +23,15 @@ const showAssetDialog = ref(false)
 const selectedAsset = ref(null)
 const editFormValid = ref(false)
 const editForm = ref(null)
-const shareLink = ref('')
-const sharePassword = ref('')
-const shareExpiry = ref('')
+const editMode = ref(false)
+const selectedPhotoIds = ref<Set<string>>(new Set())
+const showRemoveDialog = ref(false)
+const removingPhotos = ref(false)
+const allUsers = ref<any[]>([])
+const selectedUserId = ref('')
+const selectedPermission = ref<'view' | 'contribute'>('view')
+const loadingUsers = ref(false)
+const sharingAlbum = ref(false)
 
 const editAlbum = ref({
   title: '',
@@ -32,8 +45,76 @@ const formatDate = (dateString) => {
 }
 
 const openAsset = (asset) => {
-  selectedAsset.value = asset
-  showAssetDialog.value = true
+  if (editMode.value) {
+    togglePhotoSelection(asset.id)
+  } else {
+    selectedAsset.value = asset
+    showAssetDialog.value = true
+  }
+}
+
+const toggleEditMode = () => {
+  editMode.value = !editMode.value
+  if (!editMode.value) {
+    selectedPhotoIds.value.clear()
+  }
+}
+
+const togglePhotoSelection = (photoId: string) => {
+  if (selectedPhotoIds.value.has(photoId)) {
+    selectedPhotoIds.value.delete(photoId)
+  } else {
+    selectedPhotoIds.value.add(photoId)
+  }
+}
+
+const isPhotoSelected = (photoId: string) => {
+  return selectedPhotoIds.value.has(photoId)
+}
+
+const selectAllPhotos = () => {
+  albumAssets.value.forEach(asset => selectedPhotoIds.value.add(asset.id))
+}
+
+const clearPhotoSelection = () => {
+  selectedPhotoIds.value.clear()
+}
+
+const openRemoveDialog = () => {
+  if (selectedPhotoIds.value.size === 0) return
+  showRemoveDialog.value = true
+}
+
+const removePhotos = async () => {
+  if (!album.value || selectedPhotoIds.value.size === 0) return
+  
+  removingPhotos.value = true
+  try {
+    const res = await api.albums.removePhotos(album.value.id, Array.from(selectedPhotoIds.value))
+    if (res.success) {
+      // Remove deleted photos from the list
+      albumAssets.value = albumAssets.value.filter(asset => !selectedPhotoIds.value.has(asset.id))
+      album.value = res.data as any
+      selectedPhotoIds.value.clear()
+      editMode.value = false
+      showRemoveDialog.value = false
+    }
+  } catch (error) {
+    console.error('Failed to remove photos:', error)
+  } finally {
+    removingPhotos.value = false
+  }
+}
+
+const handleAssetDeleted = (deletedId: string) => {
+  // Remove the deleted asset from the album assets list
+  albumAssets.value = albumAssets.value.filter(asset => asset.id !== deletedId)
+  selectedAsset.value = null
+  
+  // Reload album to update photo count
+  if (album.value) {
+    loadAlbum()
+  }
 }
 
 const saveAlbum = async () => {
@@ -47,16 +128,81 @@ const saveAlbum = async () => {
   } catch {}
 }
 
-const generateShareLink = () => {
-  // Generate a new share token
-  const token = Math.random().toString(36).substring(2, 15)
-  shareLink.value = `https://photobox.local/share/${token}`
+const loadUsers = async () => {
+  loadingUsers.value = true
+  try {
+    const res = await api.users.list()
+    if (res.success) {
+      // Handle different response formats
+      const data = res.data as any
+      allUsers.value = Array.isArray(data) ? data : (data?.users || data?.results || [])
+    }
+  } catch (error) {
+    console.error('Failed to load users:', error)
+  } finally {
+    loadingUsers.value = false
+  }
 }
 
-const copyLink = () => {
-  navigator.clipboard.writeText(shareLink.value)
-  // Could show a snackbar here
+const shareWithUser = async () => {
+  if (!selectedUserId.value || !album.value) return
+  
+  sharingAlbum.value = true
+  try {
+    const res = await api.albums.shareAlbum(album.value.id, selectedUserId.value, selectedPermission.value)
+    if (res.success) {
+      console.log('[shareWithUser] Response:', res.data)
+      // Reload the album to get the updated shared_with list
+      await loadAlbum()
+      selectedUserId.value = ''
+      selectedPermission.value = 'view'
+    } else {
+      console.error('[shareWithUser] Failed:', res.error)
+    }
+  } catch (error) {
+    console.error('Failed to share album:', error)
+  } finally {
+    sharingAlbum.value = false
+  }
 }
+
+const revokeAccess = async (userId: string) => {
+  if (!album.value) return
+  
+  try {
+    const res = await api.albums.unshareAlbum(album.value.id, userId)
+    if (res.success) {
+      console.log('[revokeAccess] Response:', res.data)
+      // Reload the album to get the updated shared_with list
+      await loadAlbum()
+    } else {
+      console.error('[revokeAccess] Failed:', res.error)
+    }
+  } catch (error) {
+    console.error('Failed to revoke access:', error)
+  }
+}
+
+const getAvailableUsers = computed(() => {
+  if (!allUsers.value || allUsers.value.length === 0) {
+    console.log('[getAvailableUsers] No users loaded:', allUsers.value)
+    return []
+  }
+  
+  if (!album.value) {
+    console.log('[getAvailableUsers] No album loaded')
+    return allUsers.value
+  }
+  
+  const sharedUserIds = (album.value.shared_with || []).map((s: any) => String(s.user_id))
+  console.log('[getAvailableUsers] Shared user IDs:', sharedUserIds)
+  console.log('[getAvailableUsers] All users:', allUsers.value)
+  
+  const available = allUsers.value.filter(u => !sharedUserIds.includes(String(u.id)))
+  console.log('[getAvailableUsers] Available users:', available)
+  
+  return available
+})
 const loadAlbum = async () => {
   console.log('[AlbumDetail] loadAlbum', albumId.value)
   loading.value = true
@@ -79,7 +225,18 @@ const loadAlbum = async () => {
   }
 }
 
-onMounted(loadAlbum)
+onMounted(() => {
+  loadAlbum()
+  loadUsers()
+})
+
+// Reload users when share dialog opens
+watch(showShareDialog, (newValue) => {
+  if (newValue) {
+    console.log('[AlbumDetail] Share dialog opened, loading users...')
+    loadUsers()
+  }
+})
 
 // Reload on route change (navigating between albums using same component instance)
 watch(() => route.fullPath, (p,n) => {
@@ -109,21 +266,74 @@ watch(() => route.fullPath, (p,n) => {
             ></v-img>
             {{ album ? (album.title || album.name) : 'Album' }}
             <v-spacer></v-spacer>
-            <v-btn
-              variant="outlined"
-              prepend-icon="mdi-share"
-              @click="showShareDialog = true"
-            >
-              Share
-            </v-btn>
-            <v-btn
-              variant="outlined"
-              prepend-icon="mdi-pencil"
-              @click="showEditDialog = true"
-              class="ms-2"
-            >
-              Edit
-            </v-btn>
+            
+            <!-- Edit mode actions -->
+            <template v-if="editMode">
+              <v-chip class="me-2" color="primary">
+                {{ selectedPhotoIds.size }} selected
+              </v-chip>
+              <v-btn
+                variant="text"
+                @click="selectAllPhotos"
+                size="small"
+                class="me-2"
+              >
+                Select All
+              </v-btn>
+              <v-btn
+                variant="text"
+                @click="clearPhotoSelection"
+                size="small"
+                :disabled="selectedPhotoIds.size === 0"
+                class="me-2"
+              >
+                Clear
+              </v-btn>
+              <v-btn
+                variant="outlined"
+                color="error"
+                prepend-icon="mdi-delete"
+                @click="openRemoveDialog"
+                :disabled="selectedPhotoIds.size === 0"
+                class="me-2"
+              >
+                Remove from Album
+              </v-btn>
+              <v-btn
+                variant="outlined"
+                @click="toggleEditMode"
+              >
+                Cancel
+              </v-btn>
+            </template>
+            
+            <!-- Normal mode actions -->
+            <template v-else>
+              <v-btn
+                v-if="album && album.can_contribute"
+                variant="outlined"
+                prepend-icon="mdi-pencil-box-multiple"
+                @click="toggleEditMode"
+                class="me-2"
+              >
+                Edit Photos
+              </v-btn>
+              <v-btn
+                variant="outlined"
+                prepend-icon="mdi-share"
+                @click="showShareDialog = true"
+                class="me-2"
+              >
+                Share
+              </v-btn>
+              <v-btn
+                variant="outlined"
+                prepend-icon="mdi-pencil"
+                @click="showEditDialog = true"
+              >
+                Edit Album
+              </v-btn>
+            </template>
           </v-card-title>
           
           <v-card-text>
@@ -138,23 +348,42 @@ watch(() => route.fullPath, (p,n) => {
       </v-col>
     </v-row>
 
-    <!-- Use JustifiedGallery for album assets -->
-    <JustifiedGallery
-      v-if="albumAssets.length"
-      :images="albumAssets.map(a => ({
-        src: a.thumbnail_urls?.md || a.thumbnail_urls?.sm || a.thumbnail_url || a.original_url || a.storage_url,
-        width: a.width || 1920,
-        height: a.height || 1080,
-        alt: a.description || 'Photo',
-        id: a.id,
-        ...a,
-        faces: []
-      }))"
-      :targetRowHeight="220"
-      :gap="4"
-      lastRow="left"
-      @item-click="openAsset"
-    />
+    <!-- Use JustifiedGallery for album assets with selection overlay -->
+    <div v-if="albumAssets.length" class="gallery-container" :class="{ 'edit-mode': editMode }">
+      <JustifiedGallery
+        :images="albumAssets.map(a => ({
+          src: a.thumbnail_urls?.md || a.thumbnail_urls?.sm || a.thumbnail_url || a.original_url || a.storage_url,
+          width: a.width || 1920,
+          height: a.height || 1080,
+          alt: a.description || 'Photo',
+          id: a.id,
+          ...a,
+          faces: []
+        }))"
+        :targetRowHeight="220"
+        :gap="4"
+        lastRow="left"
+        @item-click="openAsset"
+      />
+      
+      <!-- Selection overlays in edit mode -->
+      <div v-if="editMode" class="selection-overlays">
+        <div
+          v-for="asset in albumAssets"
+          :key="asset.id"
+          class="selection-overlay"
+          :class="{ 'selected': isPhotoSelected(asset.id) }"
+          @click="togglePhotoSelection(asset.id)"
+        >
+          <v-checkbox
+            :model-value="isPhotoSelected(asset.id)"
+            color="primary"
+            hide-details
+            @click.stop="togglePhotoSelection(asset.id)"
+          ></v-checkbox>
+        </div>
+      </div>
+    </div>
 
     <!-- Edit Album Dialog -->
     <v-dialog v-model="showEditDialog" max-width="500">
@@ -199,128 +428,171 @@ watch(() => route.fullPath, (p,n) => {
     </v-dialog>
 
     <!-- Share Dialog -->
-    <v-dialog v-model="showShareDialog" max-width="600">
+    <v-dialog v-model="showShareDialog" max-width="700">
       <v-card>
-        <v-card-title>Share Album</v-card-title>
+        <v-card-title class="d-flex align-center">
+          <v-icon class="me-2">mdi-share-variant</v-icon>
+          Share Album
+        </v-card-title>
         <v-card-text>
           <div class="mb-4">
-            <div class="text-h6 mb-2">{{ album.name }}</div>
-            <div class="text-body-2 text-grey">{{ album.description }}</div>
+            <div class="text-h6 mb-2">{{ album?.title || album?.name }}</div>
+            <div class="text-body-2 text-grey">{{ album?.description }}</div>
+          </div>
+
+          <!-- Share with new user -->
+          <v-card variant="outlined" class="mb-4">
+            <v-card-title class="text-subtitle-1">Share with User</v-card-title>
+            <v-card-text>
+              <v-row>
+                <v-col cols="12" md="7">
+                  <v-select
+                    v-model="selectedUserId"
+                    :items="getAvailableUsers"
+                    item-title="username"
+                    item-value="id"
+                    label="Select User"
+                    variant="outlined"
+                    density="compact"
+                    :loading="loadingUsers"
+                    prepend-inner-icon="mdi-account"
+                  >
+                    <template v-slot:item="{ props, item }">
+                      <v-list-item v-bind="props">
+                        <template v-slot:prepend>
+                          <v-avatar size="32" color="primary">
+                            <span class="text-white text-caption">
+                              {{ item.raw.username.charAt(0).toUpperCase() }}
+                            </span>
+                          </v-avatar>
+                        </template>
+                        <v-list-item-title>{{ item.raw.username }}</v-list-item-title>
+                        <v-list-item-subtitle>{{ item.raw.email }}</v-list-item-subtitle>
+                      </v-list-item>
+                    </template>
+                  </v-select>
+                </v-col>
+                <v-col cols="12" md="5">
+                  <v-select
+                    v-model="selectedPermission"
+                    :items="[
+                      { title: 'View Only', value: 'view' },
+                      { title: 'Can Contribute', value: 'contribute' }
+                    ]"
+                    label="Permission"
+                    variant="outlined"
+                    density="compact"
+                  ></v-select>
+                </v-col>
+              </v-row>
+              
+              <v-btn
+                color="primary"
+                block
+                @click="shareWithUser"
+                :disabled="!selectedUserId"
+                :loading="sharingAlbum"
+                prepend-icon="mdi-share"
+              >
+                Share Album
+              </v-btn>
+            </v-card-text>
+          </v-card>
+
+          <!-- Currently shared users -->
+          <div v-if="album?.shared_with && album.shared_with.length > 0">
+            <div class="text-subtitle-1 mb-3 font-weight-bold">Shared With</div>
+            
+            <v-list lines="two">
+              <v-list-item
+                v-for="sharedUser in album.shared_with"
+                :key="sharedUser.user_id"
+              >
+                <template v-slot:prepend>
+                  <v-avatar color="primary" size="40">
+                    <span class="text-white">
+                      {{ sharedUser.username.charAt(0).toUpperCase() }}
+                    </span>
+                  </v-avatar>
+                </template>
+
+                <v-list-item-title>{{ sharedUser.username }}</v-list-item-title>
+                <v-list-item-subtitle>
+                  <div>{{ sharedUser.email }}</div>
+                  <div class="text-caption mt-1">
+                    <v-chip size="x-small" :color="sharedUser.permission_level === 'contribute' ? 'success' : 'default'" class="me-2">
+                      {{ sharedUser.permission_level === 'contribute' ? 'Can Contribute' : 'View Only' }}
+                    </v-chip>
+                    Shared {{ formatDate(sharedUser.shared_at) }}
+                  </div>
+                </v-list-item-subtitle>
+
+                <template v-slot:append>
+                  <v-btn
+                    icon="mdi-close"
+                    size="small"
+                    variant="text"
+                    color="error"
+                    @click="revokeAccess(sharedUser.user_id)"
+                  ></v-btn>
+                </template>
+              </v-list-item>
+            </v-list>
           </div>
           
-          <v-text-field
-            v-model="shareLink"
-            label="Share Link"
-            readonly
-            append-inner-icon="mdi-content-copy"
-            @click:append-inner="copyLink"
-          ></v-text-field>
-          
-          <v-row class="mt-4">
-            <v-col cols="12" md="6">
-              <v-text-field
-                v-model="sharePassword"
-                label="Password (optional)"
-                type="password"
-              ></v-text-field>
-            </v-col>
-            <v-col cols="12" md="6">
-              <v-text-field
-                v-model="shareExpiry"
-                label="Expires (optional)"
-                type="date"
-              ></v-text-field>
-            </v-col>
-          </v-row>
-          
-          <div class="text-caption text-grey mt-2">
-            Anyone with this link can view the album. You can revoke access at any time.
-          </div>
+          <v-alert v-else type="info" variant="outlined" class="mt-2">
+            This album is not shared with anyone yet. Use the form above to share it with other users.
+          </v-alert>
         </v-card-text>
         
         <v-card-actions>
           <v-spacer></v-spacer>
           <v-btn @click="showShareDialog = false">Close</v-btn>
-          <v-btn
-            color="primary"
-            @click="generateShareLink"
-          >
-            Generate New Link
-          </v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
 
-    <!-- Asset detail dialog -->
-    <v-dialog v-model="showAssetDialog" max-width="800">
-      <v-card v-if="selectedAsset">
-        <div class="relative">
-          <v-img
-            :src="selectedAsset.original_url"
-            max-height="500"
-            cover
-          ></v-img>
-          
-          <!-- Face overlay on full image -->
-          <div
-            v-for="face in selectedAsset.faces"
-            :key="face.id"
-            class="face-overlay"
-            :style="{
-              left: `${face.x * 100}%`,
-              top: `${face.y * 100}%`,
-              width: `${face.w * 100}%`,
-              height: `${face.h * 100}%`
-            }"
-          >
-            <div class="face-border"></div>
-          </div>
-        </div>
-        
+    <!-- Remove Photos Confirmation Dialog -->
+    <v-dialog v-model="showRemoveDialog" max-width="500">
+      <v-card>
+        <v-card-title class="text-h5">
+          <v-icon color="warning" class="me-2">mdi-alert</v-icon>
+          Remove Photos from Album?
+        </v-card-title>
         <v-card-text>
-          <div class="d-flex align-center mb-2">
-            <v-icon class="me-2">mdi-calendar</v-icon>
-            {{ formatDate(selectedAsset.taken_at) }}
-          </div>
+          <v-alert type="warning" variant="outlined" class="mb-4">
+            Are you sure you want to remove {{ selectedPhotoIds.size }} photo{{ selectedPhotoIds.size > 1 ? 's' : '' }} from this album?
+          </v-alert>
           
-          <div v-if="selectedAsset.caption" class="mb-2">
-            <strong>Caption:</strong> {{ selectedAsset.caption }}
-          </div>
-          
-          <div v-if="selectedAsset.keywords?.length" class="mb-2">
-            <strong>Keywords:</strong>
-            <v-chip
-              v-for="keyword in selectedAsset.keywords"
-              :key="keyword"
-              size="small"
-              class="ma-1"
-            >
-              {{ keyword }}
-            </v-chip>
-          </div>
-          
-          <div v-if="selectedAsset.faces?.length" class="mb-2">
-            <strong>People:</strong>
-            <div class="d-flex flex-wrap">
-              <v-chip
-                v-for="face in selectedAsset.faces"
-                :key="face.id"
-                size="small"
-                class="ma-1"
-                :color="face.person ? 'primary' : 'grey'"
-              >
-                {{ face.person?.display_name || 'Unknown' }}
-              </v-chip>
-            </div>
+          <div class="text-body-2">
+            The photos will only be removed from this album. They will still be available in your main library.
           </div>
         </v-card-text>
         
         <v-card-actions>
           <v-spacer></v-spacer>
-          <v-btn @click="showAssetDialog = false">Close</v-btn>
+          <v-btn @click="showRemoveDialog = false">Cancel</v-btn>
+          <v-btn
+            color="error"
+            @click="removePhotos"
+            :loading="removingPhotos"
+          >
+            Remove from Album
+          </v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
+
+    <!-- Image Viewer V2 -->
+    <ImageViewerV2
+      v-model="showAssetDialog"
+      :asset="selectedAsset"
+      :assets="albumAssets"
+      :show-delete="isAdmin"
+      :show-add-to-album="isAdmin"
+      @asset-changed="(newAsset) => selectedAsset = newAsset"
+      @asset-deleted="handleAssetDeleted"
+    />
   </div>
 </template>
 
@@ -329,16 +601,43 @@ watch(() => route.fullPath, (p,n) => {
   position: relative;
 }
 
-.face-overlay {
-  position: absolute;
-  pointer-events: none;
+/* Gallery with selection overlays */
+.gallery-container {
+  position: relative;
 }
 
-.face-border {
-  width: 100%;
-  height: 100%;
-  border: 2px solid #4CAF50;
-  border-radius: 2px;
-  box-shadow: 0 0 4px rgba(76, 175, 80, 0.5);
+.selection-overlays {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  pointer-events: none;
+  z-index: 10;
+}
+
+.selection-overlay {
+  position: absolute;
+  pointer-events: auto;
+  cursor: pointer;
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-end;
+  padding: 8px;
+  transition: background-color 0.2s;
+}
+
+.selection-overlay:hover {
+  background-color: rgba(0, 0, 0, 0.1);
+}
+
+.selection-overlay.selected {
+  background-color: rgba(var(--v-theme-primary), 0.2);
+}
+
+.selection-overlay :deep(.v-checkbox) {
+  background-color: white;
+  border-radius: 50%;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
 }
 </style>

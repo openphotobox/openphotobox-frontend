@@ -24,6 +24,21 @@ export interface Asset {
   albums?: string[]
   tags?: string[]
   
+  // Social features
+  likes_count?: number
+  comments_count?: number
+  liked_by_user?: boolean
+  likes?: string[] // Array of usernames who liked this photo
+  comments?: Array<{
+    id: string
+    user: number
+    user_name?: string
+    user_username?: string
+    text: string
+    created_at: string
+    updated_at: string
+  }>
+  
   // EXIF data
   exif_data?: Record<string, any>
   
