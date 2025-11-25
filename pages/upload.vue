@@ -208,6 +208,23 @@ const checkingStorage = ref(true)
 const albumsLoading = ref(false)
 const albumOptions = ref<any[]>([])
 
+const normalizeTitle = (title?: string) => (title || '').trim().toLowerCase()
+
+const findAlbumIdByTitle = (title: string) => {
+  const normalized = normalizeTitle(title)
+  const candidates = (albumOptions.value || []).filter((album) => {
+    const candidateTitle = normalizeTitle(album.title || album.name)
+    return candidateTitle === normalized
+  })
+  if (!candidates.length) return null
+  candidates.sort((a, b) => {
+    const aDate = new Date(a.created_at || a.updated_at || 0).getTime()
+    const bDate = new Date(b.created_at || b.updated_at || 0).getTime()
+    return bDate - aDate
+  })
+  return candidates[0]?.id || null
+}
+
 // Check storage configuration on mount
 onMounted(async () => {
   const result = await checkStorageConfiguration()
@@ -263,13 +280,24 @@ const uploadFiles = async () => {
     // Use the smart upload system
     // If a new album title is provided, create the album first
     let albumIdForUpload: string | undefined = selectedAlbumId.value || undefined
-    if (newAlbumTitle.value.trim()) {
-      const res = await api.albums.create({ title: newAlbumTitle.value.trim() })
+    const trimmedNewAlbumTitle = newAlbumTitle.value.trim()
+    if (trimmedNewAlbumTitle) {
+      const res = await api.albums.create({ title: trimmedNewAlbumTitle })
       if (res.success) {
-        albumIdForUpload = (res.data as any).id
-        // refresh album selector
+        albumIdForUpload = (res.data as any)?.id
+        // refresh album selector so the new album is selectable
         await loadAlbums()
-        selectedAlbumId.value = albumIdForUpload
+        if (!albumIdForUpload) {
+          const resolvedId = findAlbumIdByTitle(trimmedNewAlbumTitle)
+          if (resolvedId) {
+            albumIdForUpload = resolvedId
+          } else {
+            console.warn('Created album but could not resolve its ID; photos will not be linked automatically.')
+          }
+        }
+        if (albumIdForUpload) {
+          selectedAlbumId.value = albumIdForUpload
+        }
       } else {
         alert(res.error || 'Failed to create album')
       }

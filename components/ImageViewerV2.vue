@@ -105,8 +105,8 @@
         <div
           class="viewer-content"
           @click="handleContentClick"
-          @touchstart.passive="onTouchStart"
-          @touchmove.passive="onTouchMove"
+          @touchstart="onTouchStart"
+          @touchmove="onTouchMove"
           @touchend="onTouchEnd"
           @touchcancel="resetSwipe"
         >
@@ -706,7 +706,8 @@ const swipeState = reactive({
   startX: 0,
   startY: 0,
   deltaX: 0,
-  active: false
+  active: false,
+  locked: false
 })
 const swipeThreshold = 60
 const verticalTolerance = 80
@@ -897,6 +898,7 @@ const resetSwipe = () => {
   swipeState.startY = 0
   swipeState.deltaX = 0
   swipeState.active = false
+  swipeState.locked = false
 }
 
 const onTouchStart = (event) => {
@@ -907,6 +909,7 @@ const onTouchStart = (event) => {
   swipeState.startY = touch.clientY
   swipeState.deltaX = 0
   swipeState.active = true
+  swipeState.locked = false
 }
 
 const onTouchMove = (event) => {
@@ -917,6 +920,12 @@ const onTouchMove = (event) => {
   if (Math.abs(deltaY) > Math.abs(deltaX) && Math.abs(deltaY) > verticalTolerance) {
     resetSwipe()
     return
+  }
+  if (!swipeState.locked && Math.abs(deltaX) > Math.abs(deltaY) && Math.abs(deltaX) > 10) {
+    swipeState.locked = true
+  }
+  if (swipeState.locked && event.cancelable) {
+    event.preventDefault()
   }
   swipeState.deltaX = deltaX
 }

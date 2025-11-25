@@ -24,6 +24,9 @@
               :rules="usernameRules"
               class="mb-3"
               autocomplete="username"
+              autocapitalize="none"
+              autocorrect="off"
+              spellcheck="false"
             ></v-text-field>
 
             <v-text-field
@@ -35,6 +38,9 @@
               :rules="passwordRules"
               class="mb-4"
               autocomplete="current-password"
+              autocapitalize="none"
+              autocorrect="off"
+              spellcheck="false"
             ></v-text-field>
 
             <!-- Error Message -->
