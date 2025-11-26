@@ -6,6 +6,12 @@ export interface Asset {
   file_path?: string
   storage_url?: string
   thumbnail_url?: string
+  thumbnail_urls?: {
+    sm?: string
+    md?: string
+    lg?: string
+  }
+  preview_url?: string
   original_url?: string
   width?: number
   height?: number
@@ -46,6 +52,10 @@ export interface Asset {
   latitude?: number
   longitude?: number
   location?: string
+  
+  // Search-specific fields
+  similarity?: number // CLIP similarity score (for search results)
+  phash?: string // Perceptual hash for duplicate detection
 }
 
 export interface Face {

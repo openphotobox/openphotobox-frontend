@@ -2055,10 +2055,10 @@
                 }
             }
         },
-        "/api/metadata/search/clip/": {
+        "/api/metadata/search/": {
             "get": {
-                "operationId": "metadata_search_clip_retrieve",
-                "description": "Search assets by CLIP text embedding; returns ranked asset IDs with similarity.\n\nQuery params:\n  - q (text), limit (default 50)\n  - people (comma-separated UUIDs) or person (single UUID)\n  - people_mode: 'all' | 'any' (default 'all')\n  - albums (comma-separated UUIDs) or album (single UUID)",
+                "operationId": "metadata_search_retrieve",
+                "description": "General-purpose search endpoint supporting semantic CLIP search and people-only filtering.\n\nReturns full asset objects with thumbnails, likes, and comments (not just IDs).\n\nQuery params:\n  - q (text, optional): CLIP semantic search query\n  - people (comma-separated UUIDs): filter by people\n  - people_mode: 'all' | 'any' (default 'all')\n  - albums (comma-separated UUIDs): filter by albums\n  - start_date, end_date (ISO format): date range filter\n  - visibility: 'shared' | 'private'\n  - limit (default 50), offset\n\nWhen no query is provided but people are specified, returns chronologically ordered results without CLIP computation.",
                 "tags": [
                     "metadata"
                 ],

@@ -13,6 +13,7 @@ import { createUploadApi } from '@/api/endpoints/upload'
 import { createUsersApi } from '@/api/endpoints/users'
 import { createCommentsApi } from '@/api/endpoints/comments'
 import { createLikesApi } from '@/api/endpoints/likes'
+import { createSearchApi } from '@/api/endpoints/search'
 
 function createApi() {
   // Get runtime config for API base URL
@@ -42,6 +43,7 @@ function createApi() {
   const users = createUsersApi(client)
   const comments = createCommentsApi(client)
   const likes = createLikesApi(client)
+  const search = createSearchApi(client)
   
   return {
     assets,
@@ -55,6 +57,7 @@ function createApi() {
     users,
     comments,
     likes,
+    search,
     client,
   }
 }

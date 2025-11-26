@@ -16,6 +16,10 @@ const isAdmin = computed(() => authStore.isAdmin)
 const album = ref<any>(null)
 const albumAssets = ref<any[]>([])
 const loading = ref(false)
+const loadingMore = ref(false)
+const currentOffset = ref(0)
+const hasMore = ref(true)
+const pageSize = 50
 
 const showEditDialog = ref(false)
 const showShareDialog = ref(false)
@@ -206,10 +210,16 @@ const getAvailableUsers = computed(() => {
 const loadAlbum = async () => {
   console.log('[AlbumDetail] loadAlbum', albumId.value)
   loading.value = true
+  
+  // Reset pagination state
+  currentOffset.value = 0
+  hasMore.value = true
+  albumAssets.value = []
+  
   try {
     const [albumRes, assetsRes] = await Promise.all([
       api.albums.get(albumId.value),
-      api.assets.list({ limit: 100, album_id: albumId.value as string })
+      api.assets.list({ limit: pageSize, offset: 0, album_id: albumId.value as string })
     ])
     if (albumRes.success) {
       album.value = albumRes.data as any
@@ -219,15 +229,113 @@ const loadAlbum = async () => {
     if (assetsRes.success) {
       const list = (assetsRes.data?.results || assetsRes.data || []) as any[]
       albumAssets.value = list
+      currentOffset.value = list.length
+      
+      // Check if there are more results
+      // If we got fewer items than requested, we've reached the end
+      if (assetsRes.data?.next != null) {
+        hasMore.value = true
+      } else {
+        hasMore.value = list.length === pageSize
+      }
+      console.log('[AlbumDetail] Initial load:', list.length, 'assets, hasMore:', hasMore.value, 'pageSize:', pageSize)
     }
   } finally {
     loading.value = false
   }
 }
 
+const loadMoreAssets = async () => {
+  if (loadingMore.value || !hasMore.value || loading.value) {
+    console.log('[InfiniteScroll] Skipping load:', { loadingMore: loadingMore.value, hasMore: hasMore.value, loading: loading.value })
+    return
+  }
+  
+  console.log('[InfiniteScroll] Loading more assets, offset:', currentOffset.value)
+  loadingMore.value = true
+  try {
+    const assetsRes = await api.assets.list({ 
+      limit: pageSize, 
+      offset: currentOffset.value, 
+      album_id: albumId.value as string 
+    })
+    
+    if (assetsRes.success) {
+      const list = (assetsRes.data?.results || assetsRes.data || []) as any[]
+      console.log('[InfiniteScroll] Loaded', list.length, 'assets (requested:', pageSize, ')')
+      
+      if (list.length > 0) {
+        albumAssets.value = [...albumAssets.value, ...list]
+        currentOffset.value += list.length
+      }
+      
+      // Check if there are more results
+      // If we got fewer items than requested, we've reached the end
+      if (assetsRes.data?.next != null) {
+        hasMore.value = true
+      } else {
+        hasMore.value = list.length === pageSize
+      }
+      console.log('[InfiniteScroll] Has more:', hasMore.value, '(got', list.length, 'of', pageSize, 'requested)')
+    }
+  } catch (error) {
+    console.error('Failed to load more assets:', error)
+  } finally {
+    loadingMore.value = false
+  }
+}
+
+// Infinite scroll sentinel
+const sentinelRef = ref<HTMLElement | null>(null)
+let observer: IntersectionObserver | null = null
+
+const setupIntersectionObserver = () => {
+  // Clean up existing observer
+  if (observer) {
+    observer.disconnect()
+  }
+  
+  // Create new observer
+  observer = new IntersectionObserver(
+    (entries) => {
+      const entry = entries[0]
+      if (entry.isIntersecting && hasMore.value && !loadingMore.value && !loading.value) {
+        console.log('[InfiniteScroll] Sentinel visible, loading more...')
+        loadMoreAssets()
+      }
+    },
+    {
+      root: null,
+      rootMargin: '400px', // Start loading 400px before reaching the sentinel
+      threshold: 0
+    }
+  )
+  
+  // Start observing
+  if (sentinelRef.value) {
+    console.log('[InfiniteScroll] Observing sentinel')
+    observer.observe(sentinelRef.value)
+  }
+}
+
 onMounted(() => {
   loadAlbum()
   loadUsers()
+})
+
+// Watch for when sentinel becomes available
+watch([sentinelRef, () => albumAssets.value.length], () => {
+  if (sentinelRef.value && albumAssets.value.length > 0) {
+    nextTick(() => {
+      setupIntersectionObserver()
+    })
+  }
+}, { immediate: true })
+
+onUnmounted(() => {
+  if (observer) {
+    observer.disconnect()
+  }
 })
 
 // Reload users when share dialog opens
@@ -381,6 +489,25 @@ watch(() => route.fullPath, (p,n) => {
             hide-details
             @click.stop="togglePhotoSelection(asset.id)"
           ></v-checkbox>
+        </div>
+      </div>
+    </div>
+
+    <!-- Loading indicator and infinite scroll sentinel -->
+    <div v-if="albumAssets.length > 0">
+      <!-- Invisible sentinel for scroll detection -->
+      <div ref="sentinelRef" style="height: 1px; width: 100%;"></div>
+      
+      <!-- Visual feedback -->
+      <div class="d-flex justify-center my-8">
+        <v-progress-circular
+          v-if="loadingMore"
+          indeterminate
+          color="primary"
+          size="48"
+        ></v-progress-circular>
+        <div v-else-if="!hasMore" class="text-caption text-grey">
+          All photos loaded
         </div>
       </div>
     </div>

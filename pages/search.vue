@@ -311,79 +311,56 @@ const debouncedSearch = () => {
 }
 
 const performSearch = async () => {
-  // Decide mode: CLIP search if query provided; otherwise filter-only search
+  // Check if we have any query or filters
+  const hasQuery = !!searchQuery.value.trim()
   const hasFilters = selectedPeople.value.length > 0 || selectedAlbums.value.length > 0 || !!filters.value.year || !!filters.value.visibility
-  if (!searchQuery.value.trim() && !hasFilters) return
+  
+  if (!hasQuery && !hasFilters) return
 
   searching.value = true
   hasSearched.value = true
 
   try {
-    const { assets: assetsApi, utils } = useApi()
+    const { search } = useApi()
 
-    const peopleCsv = selectedPeople.value.join(',') || undefined
-    const albumsCsv = selectedAlbums.value.join(',') || undefined
+    // Build search parameters
+    const params: Record<string, any> = { limit: 80 }
+    
+    // Add query if provided (for CLIP search)
+    if (hasQuery) {
+      params.q = searchQuery.value.trim()
+    }
+    
+    // Add people filter
+    if (selectedPeople.value.length > 0) {
+      params.people = selectedPeople.value.join(',')
+      params.people_mode = peopleMode.value
+    }
+    
+    // Add albums filter
+    if (selectedAlbums.value.length > 0) {
+      params.albums = selectedAlbums.value.join(',')
+    }
+    
+    // Add visibility filter
+    if (filters.value.visibility) {
+      params.visibility = filters.value.visibility
+    }
+    
+    // Add year filter
+    if (filters.value.year) {
+      const year = Number(filters.value.year)
+      params.start_date = `${year}-01-01`
+      params.end_date = `${year}-12-31`
+    }
 
-    if (searchQuery.value.trim()) {
-      // CLIP search with optional filters
-      const params: Record<string, any> = { q: searchQuery.value.trim(), limit: 60 }
-      if (peopleCsv) params.people = peopleCsv
-      if (albumsCsv) params.albums = albumsCsv
-      if (selectedPeople.value.length > 0) params.people_mode = peopleMode.value
-      if (filters.value.visibility) params.visibility = filters.value.visibility
-      if (filters.value.year) {
-        // rough year filter via start/end
-        const year = Number(filters.value.year)
-        params.start_date = `${year}-01-01`
-        params.end_date = `${year}-12-31`
-      }
-
-      const clip = await utils.createEndpoint<{ results: { asset_id: string; similarity: number; distance: number }[] }>('get', '/api/metadata/search/clip/')(
-        undefined,
-        params
-      )
-      if (!clip.success || !clip.data) {
-        searchResults.value = []
-        return
-      }
-      const results = Array.isArray(clip.data.results) ? clip.data.results : []
-      if (!results.length) {
-        searchResults.value = []
-        return
-      }
-      const calls = results.map(r => () => assetsApi.get(r.asset_id))
-      const responses = await utils.batch(calls)
-      const seen = new Set<string>()
-      const merged = [] as any[]
-      responses.forEach((resp, idx) => {
-        if (resp.success && resp.data) {
-          const asset = resp.data
-          const id = String(asset.id)
-          if (!seen.has(id)) {
-            seen.add(id)
-            merged.push({ ...asset, similarity: results[idx].similarity })
-          }
-        }
-      })
-      searchResults.value = merged
+    // Call the unified search endpoint - it returns full asset data!
+    const resp = await search.search(params)
+    
+    if (resp.success && resp.data) {
+      searchResults.value = resp.data.results || []
     } else {
-      // Filter-only search using assets listing
-      const params: Record<string, any> = { limit: 80 }
-      if (peopleCsv) params.people = peopleCsv
-      if (albumsCsv) params.albums = albumsCsv
-      if (selectedPeople.value.length > 0) params.people_mode = peopleMode.value
-      if (filters.value.visibility) params.visibility = filters.value.visibility
-      if (filters.value.year) {
-        const year = Number(filters.value.year)
-        params.start_date = `${year}-01-01`
-        params.end_date = `${year}-12-31`
-      }
-      const resp = await assetsApi.list(params)
-      if (resp.success && resp.data) {
-        searchResults.value = resp.data.results || []
-      } else {
-        searchResults.value = []
-      }
+      searchResults.value = []
     }
   } catch (error) {
     console.error('Search failed:', error)
