@@ -17,7 +17,7 @@ const album = ref<any>(null)
 const albumAssets = ref<any[]>([])
 const loading = ref(false)
 const loadingMore = ref(false)
-const currentOffset = ref(0)
+const nextCursor = ref<string | null>(null)
 const hasMore = ref(true)
 const pageSize = 50
 
@@ -212,14 +212,14 @@ const loadAlbum = async () => {
   loading.value = true
   
   // Reset pagination state
-  currentOffset.value = 0
+  nextCursor.value = null
   hasMore.value = true
   albumAssets.value = []
   
   try {
     const [albumRes, assetsRes] = await Promise.all([
       api.albums.get(albumId.value),
-      api.assets.list({ limit: pageSize, offset: 0, album_id: albumId.value as string })
+      api.client.get('/api/v2/assets/', { limit: pageSize, album_id: albumId.value as string })
     ])
     if (albumRes.success) {
       album.value = albumRes.data as any
@@ -227,18 +227,26 @@ const loadAlbum = async () => {
       editAlbum.value.description = album.value.description || ''
     }
     if (assetsRes.success) {
-      const list = (assetsRes.data?.results || assetsRes.data || []) as any[]
+      const data = assetsRes.data as any
+      const list = (data?.results || data || []) as any[]
       albumAssets.value = list
-      currentOffset.value = list.length
       
-      // Check if there are more results
-      // If we got fewer items than requested, we've reached the end
-      if (assetsRes.data?.next != null) {
-        hasMore.value = true
+      // Extract cursor from next URL if available
+      if (data?.next) {
+        try {
+          const url = new URL(data.next)
+          nextCursor.value = url.searchParams.get('cursor')
+          hasMore.value = true
+        } catch {
+          nextCursor.value = null
+          hasMore.value = false
+        }
       } else {
-        hasMore.value = list.length === pageSize
+        nextCursor.value = null
+        hasMore.value = false
       }
-      console.log('[AlbumDetail] Initial load:', list.length, 'assets, hasMore:', hasMore.value, 'pageSize:', pageSize)
+      
+      console.log('[AlbumDetail] Initial load:', list.length, 'assets, hasMore:', hasMore.value, 'nextCursor:', nextCursor.value)
     }
   } finally {
     loading.value = false
@@ -251,35 +259,58 @@ const loadMoreAssets = async () => {
     return
   }
   
-  console.log('[InfiniteScroll] Loading more assets, offset:', currentOffset.value)
+  if (!nextCursor.value) {
+    console.log('[InfiniteScroll] No cursor available, stopping')
+    hasMore.value = false
+    return
+  }
+  
+  console.log('[InfiniteScroll] Loading more assets, cursor:', nextCursor.value, 'current total:', albumAssets.value.length)
   loadingMore.value = true
   try {
-    const assetsRes = await api.assets.list({ 
-      limit: pageSize, 
-      offset: currentOffset.value, 
+    const assetsRes = await api.client.get('/api/v2/assets/', { 
+      limit: pageSize,
+      cursor: nextCursor.value,
       album_id: albumId.value as string 
     })
     
     if (assetsRes.success) {
-      const list = (assetsRes.data?.results || assetsRes.data || []) as any[]
+      const data = assetsRes.data as any
+      const list = (data?.results || data || []) as any[]
       console.log('[InfiniteScroll] Loaded', list.length, 'assets (requested:', pageSize, ')')
       
-      if (list.length > 0) {
-        albumAssets.value = [...albumAssets.value, ...list]
-        currentOffset.value += list.length
+      // If we got 0 results, we're definitely done
+      if (list.length === 0) {
+        hasMore.value = false
+        nextCursor.value = null
+        console.log('[InfiniteScroll] No more results, stopping')
+        return
       }
       
-      // Check if there are more results
-      // If we got fewer items than requested, we've reached the end
-      if (assetsRes.data?.next != null) {
-        hasMore.value = true
+      // Add new assets
+      albumAssets.value = [...albumAssets.value, ...list]
+      
+      // Extract cursor from next URL if available
+      if (data?.next) {
+        try {
+          const url = new URL(data.next)
+          nextCursor.value = url.searchParams.get('cursor')
+          hasMore.value = true
+        } catch {
+          nextCursor.value = null
+          hasMore.value = false
+        }
       } else {
-        hasMore.value = list.length === pageSize
+        nextCursor.value = null
+        hasMore.value = false
       }
-      console.log('[InfiniteScroll] Has more:', hasMore.value, '(got', list.length, 'of', pageSize, 'requested)')
+      
+      console.log('[InfiniteScroll] Has more:', hasMore.value, 'nextCursor:', nextCursor.value, 'total assets:', albumAssets.value.length)
     }
   } catch (error) {
     console.error('Failed to load more assets:', error)
+    hasMore.value = false
+    nextCursor.value = null
   } finally {
     loadingMore.value = false
   }

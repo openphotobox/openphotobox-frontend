@@ -50,6 +50,7 @@ const loadPerson = async () => {
     }
     if (!aRes.success) throw new Error(aRes.error || 'Failed to load photos')
     const results = aRes.data?.results || aRes.data || []
+    console.log('[PersonDetail] Loaded', results.length, 'assets for person', currentId)
     // Filter to only show assets with confirmed faces for this person
     personAssets.value = results
       .map((a: any) => ({
@@ -60,8 +61,10 @@ const loadPerson = async () => {
         )
       }))
       .filter((a: any) => a.faces.length > 0) // Only include assets that have confirmed faces
+    console.log('[PersonDetail] After filtering:', personAssets.value.length, 'assets with confirmed faces')
   } catch (e: any) {
     error.value = e
+    console.error('[PersonDetail] Error loading person:', e)
   } finally {
     pending.value = false
   }
@@ -92,10 +95,10 @@ const personAssetsSorted = computed(() => {
 
 const galleryImages = computed(() => {
   return personAssetsSorted.value.map(a => ({
-    src: a.thumbnail_url,
+    src: a.thumbnail_urls?.md || a.thumbnail_urls?.sm || a.thumbnail_url || a.storage_url,
     width: a.width || 1,
     height: a.height || 1,
-    alt: a.caption || '',
+    alt: a.caption || a.description || '',
     asset: a,
     // Provide normalized face boxes for this person for gallery overlay
     faces: facesForAsset(a).map((f:any) => ({ x: f.x, y: f.y, w: f.w, h: f.h }))
